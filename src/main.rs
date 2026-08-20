@@ -67,6 +67,16 @@ impl Theme {
     }
 }
 
+/// Inline style shared by `<select>`/`<button>`/`<input>` toolbar controls,
+/// which otherwise keep the browser's default white background regardless
+/// of theme.
+fn control_style(theme: Theme) -> String {
+    format!(
+        "background:{}; color:{}; border:1px solid {}; border-radius:4px; padding:2px 6px; font-size:13px;",
+        theme.node_bg, theme.text_color, theme.toolbar_border
+    )
+}
+
 /// Nodes whose title or a field's key/value contains `query`
 /// (case-insensitive). Searched across the whole graph regardless of
 /// collapse state, since a match hidden under a collapsed ancestor should
@@ -301,7 +311,7 @@ fn App() -> impl IntoView {
                 theme().toolbar_bg, theme().toolbar_border
             )>
                 <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Format"</label>
-                <select on:change=on_format_change>
+                <select style=move || control_style(theme()) on:change=on_format_change>
                     {Format::ALL
                         .iter()
                         .map(|f| view! { <option value=f.label()>{f.label()}</option> })
@@ -311,13 +321,13 @@ fn App() -> impl IntoView {
                 <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
 
                 <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Convert to"</label>
-                <select on:change=on_convert_target_change>
+                <select style=move || control_style(theme()) on:change=on_convert_target_change>
                     {Format::ALL
                         .iter()
                         .map(|f| view! { <option value=f.label()>{f.label()}</option> })
                         .collect::<Vec<_>>()}
                 </select>
-                <button on:click=on_convert_click>"Convert"</button>
+                <button style=move || control_style(theme()) on:click=on_convert_click>"Convert"</button>
 
                 <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
 
@@ -325,13 +335,14 @@ fn App() -> impl IntoView {
                 <input
                     type="text"
                     placeholder="key or value..."
+                    style=move || control_style(theme())
                     prop:value=move || search.get()
                     on:input=move |ev| set_search.set(event_target_value(&ev))
                 />
 
                 <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
 
-                <button on:click=move |_| set_is_dark.update(|d| *d = !*d)>
+                <button style=move || control_style(theme()) on:click=move |_| set_is_dark.update(|d| *d = !*d)>
                     {move || if is_dark.get() { "Light theme" } else { "Dark theme" }}
                 </button>
 
@@ -519,8 +530,8 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     }}
                 </span>
                 <span>
-                    <button on:click=on_export_svg>"Export SVG"</button>
-                    <button on:click=on_export_png>"Export PNG"</button>
+                    <button style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
+                    <button style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">

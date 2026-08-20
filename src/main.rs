@@ -1,44 +1,50 @@
 use json_ruster::graph::{build_graph, Graph};
 use json_ruster::layout::{layout as compute_layout, NodeLayout};
 use json_ruster::model::DataNode;
-use json_ruster::parsers;
+use json_ruster::parsers::{self, Format};
 use leptos::ev::{MouseEvent, PointerEvent, WheelEvent};
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
 
-const DEFAULT_JSON: &str = r#"{
-  "name": "json-ruster",
-  "version": "0.1.0",
-  "tags": ["json", "rust", "wasm"],
-  "author": {
-    "name": "Aurelien",
-    "active": true,
-    "address": {
-      "city": "Paris"
-    }
-  }
-}"#;
-
 #[component]
 fn App() -> impl IntoView {
-    let (input, set_input) = signal(DEFAULT_JSON.to_string());
+    let (format, set_format) = signal(Format::Json);
+    let (input, set_input) = signal(Format::Json.sample().to_string());
 
-    let parsed = Memo::new(move |_| parsers::json::parse_json(&input.get()));
+    let parsed = Memo::new(move |_| parsers::parse(format.get(), &input.get()));
+
+    let on_format_change = move |ev| {
+        if let Some(new_format) = Format::from_label(&event_target_value(&ev)) {
+            set_format.set(new_format);
+            set_input.set(new_format.sample().to_string());
+        }
+    };
 
     view! {
-        <div style="display:flex; height:100vh; width:100vw; font-family: sans-serif;">
-            <textarea
-                style="width:40%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em;"
-                prop:value=move || input.get()
-                on:input=move |ev| set_input.set(event_target_value(&ev))
-            />
-            <div style="width:60%; height:100%; overflow:hidden; background:#0f1117;">
-                {move || match parsed.get() {
-                    Ok(data) => view! { <GraphView data=data /> }.into_any(),
-                    Err(e) => view! {
-                        <p style="color:#ff6b6b; padding:1em; font-family: monospace;">{e}</p>
-                    }.into_any(),
-                }}
+        <div style="display:flex; flex-direction:column; height:100vh; width:100vw; font-family: sans-serif;">
+            <div style="padding:6px 10px; background:#1a202c; border-bottom:1px solid #2d3748;">
+                <label style="color:#a0aec0; font-size:13px; margin-right:6px;">"Format"</label>
+                <select on:change=on_format_change>
+                    {Format::ALL
+                        .iter()
+                        .map(|f| view! { <option value=f.label()>{f.label()}</option> })
+                        .collect::<Vec<_>>()}
+                </select>
+            </div>
+            <div style="display:flex; flex:1; min-height:0;">
+                <textarea
+                    style="width:40%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em;"
+                    prop:value=move || input.get()
+                    on:input=move |ev| set_input.set(event_target_value(&ev))
+                />
+                <div style="width:60%; height:100%; overflow:hidden; background:#0f1117;">
+                    {move || match parsed.get() {
+                        Ok(data) => view! { <GraphView data=data /> }.into_any(),
+                        Err(e) => view! {
+                            <p style="color:#ff6b6b; padding:1em; font-family: monospace; white-space:pre-wrap;">{e}</p>
+                        }.into_any(),
+                    }}
+                </div>
             </div>
         </div>
     }

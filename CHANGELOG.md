@@ -4,6 +4,17 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - Jalon 3 — Multi-formats
+
+### Ajouté
+- Parseurs YAML (`serde_yaml`), XML (`roxmltree`), CSV (`csv`) et TOML (`toml`) vers `DataNode`, avec tests unitaires pour chacun.
+- `parsers::Format` : énumération des formats supportés, avec exemple (`sample()`) et dispatch de parsing (`parsers::parse`).
+- Sélecteur de format dans l'UI ; changer de format recharge l'éditeur avec un exemple représentatif.
+- Affichage des erreurs de parsing (JSON/YAML/XML/CSV/TOML) directement dans le panneau du graphe.
+
+### Notes
+- Pas de debounce sur la saisie : le re-parsing à chaque frappe est négligeable pour la taille de documents visée, donc omis pour rester simple (cf. plan initial qui l'envisageait).
+
 ## [0.2.0] - Jalon 2 — Interactivité
 
 ### Ajouté

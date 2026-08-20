@@ -1,6 +1,19 @@
 use crate::model::DataNode;
 use serde_json::Value;
 
+pub const SAMPLE: &str = r#"{
+  "name": "json-ruster",
+  "version": "0.1.0",
+  "tags": ["json", "rust", "wasm"],
+  "author": {
+    "name": "John",
+    "active": true,
+    "address": {
+      "city": "Paris"
+    }
+  }
+}"#;
+
 pub fn parse_json(input: &str) -> Result<DataNode, String> {
     let value: Value = serde_json::from_str(input).map_err(|e| e.to_string())?;
     Ok(from_value(value))

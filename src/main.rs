@@ -100,6 +100,13 @@ fn GraphView(data: DataNode) -> impl IntoView {
                 set.insert(id);
             }
         });
+        // Collapsing/expanding reshapes the whole layout, so the current
+        // pan/zoom can easily leave the affected node (or everything else)
+        // outside the viewport. Reset the view rather than leaving it
+        // pointing at empty space.
+        set_scale.set(1.0);
+        set_tx.set(0.0);
+        set_ty.set(0.0);
     };
     let select = move |id: usize| set_selected.set(Some(id));
     let toggle_expand = move |key: (usize, FieldRef)| {

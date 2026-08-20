@@ -17,27 +17,35 @@ const BOX_PADDING: f64 = 12.0;
 const MIN_WIDTH: f64 = 100.0;
 
 /// Max characters shown for a title or "key: value" line before it is
-/// truncated with an ellipsis. Keeps box width bounded regardless of how
-/// long the underlying data is; the full text stays available as a native
-/// tooltip in the renderer.
+/// truncated. Keeps box width bounded regardless of how long the
+/// underlying data is; the renderer appends a clickable `MORE_MARKER` that
+/// reveals the full text, and its width is accounted for here too.
 pub const MAX_FIELD_CHARS: usize = 48;
+pub const MORE_MARKER: &str = " [...]";
 
-pub fn truncate_display(s: &str) -> String {
+/// Truncates `s` to `MAX_FIELD_CHARS`, returning the truncated text and
+/// whether truncation happened (so the caller can decide how to surface
+/// the omitted part, e.g. a clickable marker).
+pub fn truncate_display(s: &str) -> (String, bool) {
     if s.chars().count() <= MAX_FIELD_CHARS {
-        s.to_string()
+        (s.to_string(), false)
     } else {
-        let head: String = s.chars().take(MAX_FIELD_CHARS.saturating_sub(1)).collect();
-        format!("{head}\u{2026}")
+        let head: String = s.chars().take(MAX_FIELD_CHARS).collect();
+        (head, true)
     }
 }
 
-pub fn field_text(key: &str, value: &str) -> String {
+pub fn field_text(key: &str, value: &str) -> (String, bool) {
     let full = if key.is_empty() {
         value.to_string()
     } else {
         format!("{key}: {value}")
     };
     truncate_display(&full)
+}
+
+fn display_width_chars(text: &str, truncated: bool) -> usize {
+    text.chars().count() + if truncated { MORE_MARKER.chars().count() } else { 0 }
 }
 
 /// Simplified Reingold-Tilford style tree layout: leaves are placed left to
@@ -122,8 +130,14 @@ fn node_size(node: &GraphNode) -> (f64, f64) {
     let max_chars = node
         .fields
         .iter()
-        .map(|(k, v)| field_text(k, v).chars().count())
-        .chain(std::iter::once(truncate_display(&node.title).chars().count()))
+        .map(|(k, v)| {
+            let (display, truncated) = field_text(k, v);
+            display_width_chars(&display, truncated)
+        })
+        .chain(std::iter::once({
+            let (display, truncated) = truncate_display(&node.title);
+            display_width_chars(&display, truncated)
+        }))
         .max()
         .unwrap_or(4);
 
@@ -166,9 +180,16 @@ mod tests {
     #[test]
     fn field_text_truncates_long_values() {
         let long_value = "a".repeat(200);
-        let text = field_text("about", &long_value);
+        let (text, truncated) = field_text("about", &long_value);
         assert!(text.chars().count() <= MAX_FIELD_CHARS);
-        assert!(text.ends_with('\u{2026}'));
+        assert!(truncated);
+    }
+
+    #[test]
+    fn field_text_reports_no_truncation_for_short_values() {
+        let (text, truncated) = field_text("a", "1");
+        assert_eq!(text, "a: 1");
+        assert!(!truncated);
     }
 
     #[test]
@@ -177,7 +198,8 @@ mod tests {
         let graph = build_graph(&data);
         let positions = layout(&graph, &HashSet::new());
         let width = positions[&graph.root].width;
-        let max_expected = MAX_FIELD_CHARS as f64 * CHAR_WIDTH + BOX_PADDING * 2.0;
+        let max_chars = MAX_FIELD_CHARS + MORE_MARKER.chars().count();
+        let max_expected = max_chars as f64 * CHAR_WIDTH + BOX_PADDING * 2.0;
         assert!(width <= max_expected, "width {width} exceeded {max_expected}");
     }
 

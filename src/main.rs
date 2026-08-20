@@ -1,6 +1,6 @@
 use json_ruster::graph::{build_graph, Graph};
 use json_ruster::layout::{
-    field_text, layout as compute_layout, truncate_display, NodeLayout,
+    field_text, layout as compute_layout, truncate_display, NodeLayout, MORE_MARKER,
 };
 use json_ruster::model::DataNode;
 use json_ruster::parsers::{self, Format};
@@ -58,6 +58,7 @@ fn GraphView(data: DataNode) -> impl IntoView {
 
     let (collapsed, set_collapsed) = signal(HashSet::<usize>::new());
     let (selected, set_selected) = signal(None::<usize>);
+    let (inspect, set_inspect) = signal(None::<String>);
 
     let (scale, set_scale) = signal(1.0_f64);
     let (tx, set_tx) = signal(0.0_f64);
@@ -125,7 +126,15 @@ fn GraphView(data: DataNode) -> impl IntoView {
                         graph.with_value(|g| {
                             let positions = compute_layout(g, &collapsed_set);
                             let edges = render_edges(g, &positions);
-                            let nodes = render_nodes(g, &positions, &collapsed_set, sel, toggle, select);
+                            let nodes = render_nodes(
+                                g,
+                                &positions,
+                                &collapsed_set,
+                                sel,
+                                toggle,
+                                select,
+                                set_inspect,
+                            );
                             view! {
                                 <g transform="translate(20, 20)">
                                     {edges}
@@ -136,6 +145,15 @@ fn GraphView(data: DataNode) -> impl IntoView {
                     }}
                 </g>
             </svg>
+            {move || inspect.get().map(|text| view! {
+                <div style="position:absolute; bottom:0; left:0; right:0; max-height:45%; overflow:auto; background:rgba(15,17,23,0.97); border-top:1px solid #4a5568; padding:10px 36px 10px 10px; font-family:monospace; font-size:12px; color:#e2e8f0; white-space:pre-wrap; word-break:break-word; z-index:2;">
+                    <button
+                        on:click=move |ev: MouseEvent| { ev.stop_propagation(); set_inspect.set(None); }
+                        style="position:absolute; top:6px; right:8px; background:none; border:none; color:#a0aec0; font-size:16px; cursor:pointer; line-height:1;"
+                    >"×"</button>
+                    {text}
+                </div>
+            })}
         </div>
     }
 }
@@ -160,6 +178,40 @@ fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>) -> Vec<im
         .collect::<Vec<_>>()
 }
 
+/// A text line with an optional trailing clickable `[...]` marker that
+/// reveals the untruncated text in the inspect panel.
+fn truncatable_line(
+    x: &'static str,
+    y: String,
+    color: &'static str,
+    weight: Option<&'static str>,
+    full: String,
+    display: String,
+    truncated: bool,
+    set_inspect: WriteSignal<Option<String>>,
+) -> impl IntoView {
+    view! {
+        <text x=x y=y fill=color font-size="12" font-family="monospace" font-weight=weight>
+            {display}
+            {truncated.then(|| {
+                let full = full.clone();
+                view! {
+                    <tspan
+                        fill="#63b3ed"
+                        style="cursor:pointer; text-decoration:underline;"
+                        on:click=move |ev: MouseEvent| {
+                            ev.stop_propagation();
+                            set_inspect.set(Some(full.clone()));
+                        }
+                    >
+                        {MORE_MARKER}
+                    </tspan>
+                }
+            })}
+        </text>
+    }
+}
+
 fn render_nodes(
     graph: &Graph,
     positions: &HashMap<usize, NodeLayout>,
@@ -167,6 +219,7 @@ fn render_nodes(
     selected: Option<usize>,
     toggle: impl Fn(usize) + Copy + 'static,
     select: impl Fn(usize) + Copy + 'static,
+    set_inspect: WriteSignal<Option<String>>,
 ) -> Vec<impl IntoView> {
     let mut ids: Vec<usize> = positions.keys().copied().collect();
     ids.sort_unstable();
@@ -176,7 +229,7 @@ fn render_nodes(
             let node = &graph.nodes[id];
             let pos = positions[&id];
             let title_full = node.title.clone();
-            let title_display = truncate_display(&node.title);
+            let (title_display, title_truncated) = truncate_display(&node.title);
             let has_children = !node.children.is_empty();
             let is_collapsed = collapsed.contains(&id);
             let is_selected = selected == Some(id);
@@ -199,14 +252,9 @@ fn render_nodes(
                     } else {
                         format!("{k}: {v}")
                     };
-                    let display = field_text(k, v);
+                    let (display, truncated) = field_text(k, v);
                     let y = 30.0 + i as f64 * 20.0;
-                    view! {
-                        <text x="10" y=y fill="#e2e8f0" font-size="12" font-family="monospace">
-                            <title>{full}</title>
-                            {display}
-                        </text>
-                    }
+                    truncatable_line("10", y.to_string(), "#e2e8f0", None, full, display, truncated, set_inspect)
                 })
                 .collect();
 
@@ -234,10 +282,16 @@ fn render_nodes(
                         stroke=stroke
                         stroke-width="1.5"
                     />
-                    <text x="10" y="16" fill="#63b3ed" font-size="12" font-family="monospace" font-weight="bold">
-                        <title>{title_full}</title>
-                        {title_display}
-                    </text>
+                    {truncatable_line(
+                        "10",
+                        "16".to_string(),
+                        "#63b3ed",
+                        Some("bold"),
+                        title_full,
+                        title_display,
+                        title_truncated,
+                        set_inspect,
+                    )}
                     {(!marker.is_empty()).then(|| view! {
                         <text x=marker_x y="16" fill="#a0aec0" font-size="11" font-family="monospace">{marker}</text>
                     })}

@@ -46,6 +46,8 @@ roxmltree = "0.21.1"
 csv = "1.4.0"
 toml = "1.1.4"
 js-sys = "0.3.104"
+miniz_oxide = "0.9.1"
+base64 = "0.23.1"
 
 [profile.release]
 opt-level = "s"

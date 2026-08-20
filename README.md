@@ -82,7 +82,7 @@ docker compose --profile test run --rm test
 - **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable.
 - **Theme**: the moon/sun icon (top-right) toggles the whole UI, including exported SVG/PNG files. Defaults to the OS's `prefers-color-scheme`, then remembers your last choice.
 - **Copy**: copies the editor's current content to the clipboard.
-- **Share**: copies a link that reopens with the same document and format (encoded in the URL fragment, so nothing is sent to a server).
+- **Share**: copies a link that reopens with the same document and format, encoded in the URL fragment (nothing is sent to a server) as DEFLATE-compressed, base64 text. Refused with an error instead of producing an unusable link if the compressed payload would exceed 8 KB.
 
 The current document, format and theme are saved to `localStorage`, so reloading the page picks up where you left off (a share link, if present in the URL, takes priority).
 

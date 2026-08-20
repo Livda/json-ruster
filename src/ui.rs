@@ -6,6 +6,7 @@ use crate::layout::{
 };
 use crate::model::DataNode;
 use crate::parsers::{self, Format};
+use base64::Engine as _;
 use leptos::ev::{MouseEvent, PointerEvent, WheelEvent};
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -123,9 +124,28 @@ fn initial_theme() -> bool {
     prefers_dark_theme()
 }
 
-/// A shared link encodes the format and raw text in the URL fragment
-/// (`#format=Json&data=...`), so opening it reconstructs the same document
-/// without any server round-trip.
+/// Cap on the *compressed, base64* share payload, not the raw document --
+/// that's what actually ends up in the URL. The fragment is never sent to
+/// a server, but chat apps, browsers and clipboard managers can still
+/// choke on or silently truncate extremely long URLs.
+const MAX_SHARE_DATA_LEN: usize = 8_000;
+
+fn compress_for_url(input: &str) -> String {
+    let compressed = miniz_oxide::deflate::compress_to_vec(input.as_bytes(), 8);
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(compressed)
+}
+
+fn decompress_from_url(data: &str) -> Option<String> {
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(data)
+        .ok()?;
+    let decompressed = miniz_oxide::inflate::decompress_to_vec(&bytes).ok()?;
+    String::from_utf8(decompressed).ok()
+}
+
+/// A shared link encodes the format and DEFLATE+base64-compressed text in
+/// the URL fragment (`#format=Json&data=...`), so opening it reconstructs
+/// the same document without any server round-trip.
 fn parse_share_hash() -> Option<(Format, String)> {
     let hash = web_sys::window()?.location().hash().ok()?;
     let hash = hash.strip_prefix('#')?;
@@ -135,26 +155,36 @@ fn parse_share_hash() -> Option<(Format, String)> {
         let (k, v) = pair.split_once('=')?;
         match k {
             "format" => format = Format::from_label(v),
-            "data" => {
-                data = js_sys::decode_uri_component(v)
-                    .ok()
-                    .and_then(|s| s.as_string())
-            }
+            "data" => data = decompress_from_url(v),
             _ => {}
         }
     }
     Some((format?, data?))
 }
 
-fn share_url(format: Format, input: &str) -> String {
+/// Builds a shareable URL for `input` against `base` (the page URL without
+/// its fragment), or an error message if the compressed payload is still
+/// too large to share as a link. Kept separate from `share_url` so the
+/// size-limit logic is testable without touching `web_sys::window()`,
+/// which panics outside a real browser/wasm environment.
+fn share_url_with_base(format: Format, input: &str, base: &str) -> Result<String, String> {
+    let encoded = compress_for_url(input);
+    if encoded.len() > MAX_SHARE_DATA_LEN {
+        return Err(format!(
+            "Document too large to share as a link ({} KB compressed, limit {} KB)",
+            encoded.len().div_ceil(1024),
+            MAX_SHARE_DATA_LEN / 1024
+        ));
+    }
+    Ok(format!("{base}#format={}&data={encoded}", format.label()))
+}
+
+fn share_url(format: Format, input: &str) -> Result<String, String> {
     let href = web_sys::window()
         .and_then(|w| w.location().href().ok())
         .unwrap_or_default();
-    let base = href.split('#').next().unwrap_or(&href);
-    let encoded = js_sys::encode_uri_component(input)
-        .as_string()
-        .unwrap_or_default();
-    format!("{base}#format={}&data={encoded}", format.label())
+    let base = href.split('#').next().unwrap_or(&href).to_string();
+    share_url_with_base(format, input, &base)
 }
 
 /// Initial (format, text) for the editor: a share link in the URL wins,
@@ -365,6 +395,7 @@ pub fn App() -> impl IntoView {
     let (is_dark, set_is_dark) = signal(initial_theme());
     let (copied, set_copied) = signal(false);
     let (share_copied, set_share_copied) = signal(false);
+    let (share_error, set_share_error) = signal(None::<String>);
 
     // Remember the current document and theme locally so a reload picks up
     // where the user left off.
@@ -441,18 +472,26 @@ pub fn App() -> impl IntoView {
     let on_share_click = move |_| {
         let current_format = format.get_untracked();
         let current_input = input.get_untracked();
-        if let Some(location) = web_sys::window().map(|w| w.location()) {
-            let encoded = js_sys::encode_uri_component(&current_input)
-                .as_string()
-                .unwrap_or_default();
-            let _ = location.set_hash(&format!("format={}&data={encoded}", current_format.label()));
+        match share_url(current_format, &current_input) {
+            Ok(url) => {
+                if let Some(location) = web_sys::window().map(|w| w.location()) {
+                    if let Some(hash) = url.split_once('#').map(|(_, h)| h) {
+                        let _ = location.set_hash(hash);
+                    }
+                }
+                copy_to_clipboard(&url);
+                set_share_error.set(None);
+                set_share_copied.set(true);
+                set_timeout(
+                    move || set_share_copied.set(false),
+                    std::time::Duration::from_millis(1200),
+                );
+            }
+            Err(e) => {
+                set_share_copied.set(false);
+                set_share_error.set(Some(e));
+            }
         }
-        copy_to_clipboard(&share_url(current_format, &current_input));
-        set_share_copied.set(true);
-        set_timeout(
-            move || set_share_copied.set(false),
-            std::time::Duration::from_millis(1200),
-        );
     };
 
     view! {
@@ -529,6 +568,12 @@ pub fn App() -> impl IntoView {
                 />
 
                 {move || convert_error.get().map(|e| {
+                    let color = theme().error_color;
+                    view! {
+                        <span style=format!("color:{color}; font-size:12px;")>{e}</span>
+                    }
+                })}
+                {move || share_error.get().map(|e| {
                     let color = theme().error_color;
                     view! {
                         <span style=format!("color:{color}; font-size:12px;")>{e}</span>
@@ -1003,5 +1048,48 @@ mod tests {
     #[test]
     fn dark_and_light_themes_use_different_colors() {
         assert_ne!(Theme::dark(), Theme::light());
+    }
+
+    #[test]
+    fn compress_for_url_round_trips() {
+        let original = r#"{"a": 1, "b": ["x", "y", "z"], "c": {"nested": true}}"#;
+        let encoded = compress_for_url(original);
+        assert_eq!(decompress_from_url(&encoded), Some(original.to_string()));
+    }
+
+    #[test]
+    fn compress_for_url_shrinks_repetitive_text() {
+        let original = "a".repeat(10_000);
+        let encoded = compress_for_url(&original);
+        assert!(
+            encoded.len() < original.len() / 10,
+            "expected heavy compression for repetitive text, got {} bytes from {}",
+            encoded.len(),
+            original.len()
+        );
+    }
+
+    #[test]
+    fn share_url_succeeds_for_a_small_document() {
+        let url = share_url_with_base(Format::Json, r#"{"a": 1}"#, "https://example/").unwrap();
+        assert!(url.starts_with("https://example/#"));
+        assert!(url.contains("format=JSON"));
+        assert!(url.contains("data="));
+    }
+
+    #[test]
+    fn share_url_rejects_documents_too_large_to_share() {
+        // A short cycle would compress away to almost nothing; use a cheap
+        // PRNG so the text has enough entropy to stay well past
+        // MAX_SHARE_DATA_LEN even after DEFLATE + base64.
+        let mut state: u32 = 12345;
+        let big: String = (0..200_000)
+            .map(|_| {
+                state = state.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                (b'a' + (state >> 16) as u8 % 26) as char
+            })
+            .collect();
+        let err = share_url_with_base(Format::Json, &big, "https://example/").unwrap_err();
+        assert!(err.contains("too large"));
     }
 }

@@ -4,6 +4,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.1] - Share link: compression + size limit
+
+### Changed
+- Share links now DEFLATE-compress the document (`miniz_oxide`) and base64-encode it (`base64`, URL-safe, no padding) instead of a plain percent-encoded copy, shrinking typical shared URLs considerably.
+- Sharing a document whose compressed payload exceeds 8 KB is refused with an inline error instead of producing a link that browsers/chat apps may truncate or choke on.
+
+### Notes
+- The 8 KB cap is on the compressed+base64 payload, not the raw document, since that's what actually lands in the URL.
+
 ## [0.11.0] - Batch 3/3: UX, plus coverage
 
 ### Added

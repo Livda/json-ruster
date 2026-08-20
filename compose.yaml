@@ -3,3 +3,49 @@ services:
     build: .
     ports:
       - "8080:80"
+
+  # Local development: live-reload `trunk serve`, using the same builder
+  # stage/toolchain as the production image. Source is bind-mounted so
+  # edits on the host are picked up without rebuilding the image and
+  # `target/` persists across restarts -- no Rust/cargo/trunk on the host
+  # at all. Usage: `docker compose --profile dev up dev`.
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      target: builder
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    command: trunk serve --address 0.0.0.0 --port 8080
+
+  # Dev/test tooling only, not part of the production stack: standalone
+  # chromedriver + chromium for the wasm-bindgen-test integration suite
+  # (tests/ui.rs). Paired with the `test` service below, both on the
+  # regular compose bridge network -- no --network host, and no cargo/rust
+  # command ever runs on the host, only inside these containers.
+  chromedriver:
+    profiles: ["test"]
+    build:
+      context: .
+      target: chromedriver
+    # Needed for Chromium's sandbox to work inside a container on this host.
+    cap_add:
+      - SYS_ADMIN
+
+  # Runs the wasm-bindgen-test integration suite (tests/ui.rs) against the
+  # chromedriver service above, using the same builder stage/toolchain as
+  # the production image. Usage: `docker compose --profile test run --rm test`.
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      target: builder
+    depends_on:
+      - chromedriver
+    environment:
+      CHROMEDRIVER_REMOTE: "http://chromedriver:9515"
+    command: >
+      sh -c "WASM_BINDGEN_TEST_ADDRESS=$$(hostname -i):8765
+      cargo test --target wasm32-unknown-unknown --test ui"

@@ -13,37 +13,39 @@ A Rust clone of [JSON Crack](https://github.com/AykutSarac/jsoncrack.com): inter
 - Graph rendered as native SVG (no canvas, no JS graph library).
 - Release builds run through `wasm-opt -Oz` (`data-wasm-opt="z"` in `index.html`, version pinned in `Trunk.toml`), shrinking the shipped `.wasm` from ~1.1 MB to ~0.7 MB.
 
-## Running locally
+## Everything runs in containers
+
+No Rust toolchain is required on the host -- `Dockerfile` (`builder` stage) has `rustup`, `trunk` and `wasm-bindgen-cli` pinned and pre-installed, and every workflow below runs through it via `compose.yaml`. `rust-toolchain.toml`, the Docker base images and CI all pin the exact same Rust version (`1.93.1`) for reproducibility.
+
+**Development** (live-reload):
 
 ```bash
-rustup target add wasm32-unknown-unknown
-cargo install trunk
-trunk serve
+docker compose --profile dev up dev
 ```
 
-Then open `http://127.0.0.1:8080` (or whichever port is shown).
+Then open `http://127.0.0.1:8080`. The source is bind-mounted, so edits on the host are picked up by `trunk serve`'s watcher without rebuilding the image; `target/` also lives on the host and persists across restarts.
 
-## Running with Docker
-
-```bash
-docker build -t json-ruster .
-docker run --rm -p 8080:80 json-ruster
-```
-
-Or with Docker Compose:
+**Production image**:
 
 ```bash
 docker compose up --build
 ```
 
-Then open `http://127.0.0.1:8080`. The image is a multi-stage build: a `rust:1.93.1-slim-bookworm` stage compiles the app with Trunk (`trunk build --release`), and the runtime stage is `nginx:1.27-alpine` serving the static `dist/` output — no Rust toolchain in the final image. Both base images are pinned to a specific version (not `latest`/`alpine`) for reproducible builds, matching the Rust version pinned in `rust-toolchain.toml`.
+Then open `http://127.0.0.1:8080`. This builds the full multi-stage `Dockerfile`: `builder` compiles the app with Trunk (`trunk build --release`, `wasm-opt`-optimized), and the final `runtime` stage is `nginx:1.27-alpine` serving the static output -- no Rust toolchain in that image. `docker build -t json-ruster . && docker run --rm -p 8080:80 json-ruster` works the same way without Compose.
 
 ## Tests
 
-Pure modules (parsers, layout) are tested outside the browser:
+Pure logic (parsers, layout, convert, `find_matches`, `control_style`) is tested natively, no browser or container needed:
 
 ```bash
-cargo test --lib
+docker compose --profile dev run --rm --build dev cargo test --lib
+```
+
+DOM-level integration tests (`tests/ui.rs`, mounting `App` and driving it via real events) need a browser, provided by a standalone `chromedriver` + `chromium` service on the same compose network -- see `compose.yaml` for how the test container finds it and exposes itself back (`CHROMEDRIVER_REMOTE`, `WASM_BINDGEN_TEST_ADDRESS`):
+
+```bash
+docker compose --profile test up -d chromedriver
+docker compose --profile test run --rm test
 ```
 
 ## CI
@@ -57,7 +59,8 @@ cargo test --lib
 - `src/graph.rs` — builds a tree of displayable nodes (`GraphNode`) from a `DataNode`, tracking parents and computing paths (`path_to`).
 - `src/layout.rs` — node positioning (simplified Reingold–Tilford-style algorithm), accounting for collapsed nodes and inline-expanded lines.
 - `src/convert.rs` — serializes a `DataNode` back to any supported format's text (JSON/YAML/XML/CSV/TOML), inferring numbers/booleans/null from scalar text.
-- `src/main.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection, conversion, SVG/PNG export, search, theme).
+- `src/ui.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection, conversion, SVG/PNG export, search, theme); part of the library so `tests/ui.rs` can mount and drive it.
+- `src/main.rs` — just calls `mount_to_body(ui::App)`.
 
 ## Interactions
 

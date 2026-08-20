@@ -4,7 +4,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
-## [0.9.0] - Batch 1/3: Performance
+## [0.10.0] - Batch 2/3: Robustness
+
+### Added
+- Debounced search: the box updates immediately, but `find_matches` (which rescans every node) only runs ~200ms after the user stops typing.
+- `tests/ui.rs`: wasm-bindgen-test DOM integration suite (mounts `App` in a real browser, dispatches real input/click events) covering the format select, JSON parse error vs. graph rendering, and the theme toggle. Moved all UI code from `src/main.rs` into `src/ui.rs` (part of the library) so these tests can import and mount it; `main.rs` is now just the `mount_to_body` call.
+- Pure-logic unit tests for `find_matches` and `control_style` in `src/ui.rs`, run via plain `cargo test --lib` (no browser).
+- Containerized dev/test workflow, all on the compose bridge network (no host Rust toolchain, no `--network host`): a `dev` service (`trunk serve`, bind-mounted source, live reload) and a `test` service (runs `cargo test --target wasm32-unknown-unknown --test ui` against a `chromedriver` service on the same network), both reusing the `Dockerfile`'s `builder` stage. `chromedriver` is a new stage in the same `Dockerfile` (chromium + chromedriver), not a separate file.
+
+### Fixed
+- `Dockerfile` wasn't copying `Trunk.toml` into the build context, so the production image silently used a different (trunk-default) `wasm-opt` version than the one pinned for reproducibility. Verified before/after: the pinned version now downloads inside the image.
+
+### Notes
+- Getting the containerized WASM test suite working surfaced a few real gotchas, in case they bite again: `wasm-bindgen-test-runner` needs `WASM_BINDGEN_TEST_ADDRESS` as a literal `ip:port` (not a hostname, and not port `0` -- that literal `0` leaks into the URL the browser navigates to instead of resolving to the OS-assigned port); newer chromedriver rejects requests whose `Host` doesn't look local unless `--allowed-origins` is set; and under rootless Docker, containers live in a separate network namespace from the host shell, so a plain host process and a container can't reach each other via loopback tricks -- both sides of a browser-driven test need to be containers on the same compose network.
 
 ### Added
 - `wasm-opt -Oz` runs on release builds (`data-wasm-opt="z"` on the `<link data-trunk rel="rust">` tag in `index.html`, tool version pinned via `Trunk.toml`). Measured: shipped `.wasm` shrinks from ~1.1 MB (release, no wasm-opt) to ~0.7 MB.

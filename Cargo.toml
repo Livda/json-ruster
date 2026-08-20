@@ -27,6 +27,14 @@ web-sys = { version = "0.3", features = [
     "HtmlImageElement",
     "HtmlCanvasElement",
     "CanvasRenderingContext2d",
+    "HtmlSelectElement",
+    "HtmlTextAreaElement",
+    "HtmlInputElement",
+    "Event",
+    "EventInit",
+    "EventTarget",
+    "NodeList",
+    "CssStyleDeclaration",
 ] }
 serde_yaml = "0.9.34"
 roxmltree = "0.21.1"
@@ -36,3 +44,7 @@ js-sys = "0.3.104"
 
 [profile.release]
 opt-level = "s"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.77"
+wasm-bindgen-futures = "0.4"

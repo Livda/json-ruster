@@ -35,10 +35,17 @@ Then open `http://127.0.0.1:8080`. This builds the full multi-stage `Dockerfile`
 
 ## Tests
 
-Pure logic (parsers, layout, convert, `find_matches`, `control_style`) is tested natively, no browser or container needed:
+Pure logic (parsers, layout, convert, `find_matches`, `control_style`) is tested natively, no browser needed -- run it through the `test` service (same `builder` image as the browser suite below, just a different command):
 
 ```bash
-docker compose --profile dev run --rm --build dev cargo test --lib
+docker compose --profile test run --rm --build test cargo test --lib
+```
+
+Coverage for that same suite, via `cargo-llvm-cov` (pre-installed in the `builder` stage):
+
+```bash
+docker compose --profile test run --rm test cargo llvm-cov --lib --summary-only   # terminal report
+docker compose --profile test run --rm test cargo llvm-cov --lib --html           # target/llvm-cov/html
 ```
 
 DOM-level integration tests (`tests/ui.rs`, mounting `App` and driving it via real events) need a browser, provided by a standalone `chromedriver` + `chromium` service on the same compose network -- see `compose.yaml` for how the test container finds it and exposes itself back (`CHROMEDRIVER_REMOTE`, `WASM_BINDGEN_TEST_ADDRESS`):
@@ -48,9 +55,11 @@ docker compose --profile test up -d chromedriver
 docker compose --profile test run --rm test
 ```
 
+`dev`/`test` also mount a persistent `cargo-home` volume (`$CARGO_HOME`), seeded from the image on first use: installing another dev tool with e.g. `docker compose --profile dev run dev cargo install <tool>` sticks around across container recreations without touching the `Dockerfile`.
+
 ## CI
 
-`.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` (test), `trunk build --release` (build, uploaded as an artifact), then a `docker build` to validate the `Dockerfile` still builds (not pushed anywhere).
+`.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` plus `cargo-llvm-cov` (test + coverage, `lcov.info` uploaded as an artifact), `trunk build --release` (build, uploaded as an artifact), then a `docker build` to validate the `Dockerfile` still builds (not pushed anywhere). The browser-driven `tests/ui.rs` suite isn't wired into CI yet (it only runs locally via the `chromedriver`/`test` services) -- it would need chromedriver + chromium on the runner.
 
 ## Architecture
 
@@ -71,7 +80,11 @@ docker compose --profile test run --rm test
 - **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format.
 - **Export**: "Export SVG"/"Export PNG" (top-right of the graph panel) download the full graph — independent of the current pan/zoom — as a standalone file.
 - **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable.
-- **Theme**: the moon/sun icon (top-right) toggles the whole UI, including exported SVG/PNG files.
+- **Theme**: the moon/sun icon (top-right) toggles the whole UI, including exported SVG/PNG files. Defaults to the OS's `prefers-color-scheme`, then remembers your last choice.
+- **Copy**: copies the editor's current content to the clipboard.
+- **Share**: copies a link that reopens with the same document and format (encoded in the URL fragment, so nothing is sent to a server).
+
+The current document, format and theme are saved to `localStorage`, so reloading the page picks up where you left off (a share link, if present in the URL, takes priority).
 
 ## Roadmap
 

@@ -35,6 +35,11 @@ web-sys = { version = "0.3", features = [
     "EventTarget",
     "NodeList",
     "CssStyleDeclaration",
+    "Storage",
+    "MediaQueryList",
+    "Clipboard",
+    "Navigator",
+    "Location",
 ] }
 serde_yaml = "0.9.34"
 roxmltree = "0.21.1"

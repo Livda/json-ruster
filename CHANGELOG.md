@@ -4,6 +4,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.0] - Batch 3/3: UX, plus coverage
+
+### Added
+- Theme defaults to the OS's `prefers-color-scheme` on first visit instead of always dark.
+- The current document (format + text) and theme are persisted to `localStorage` and restored on reload.
+- "Share" button: encodes the format and text into the URL fragment (`#format=...&data=...`) and copies the link; opening a shared link reconstructs the same document client-side, no server involved. It takes priority over anything saved locally.
+- "Copy" button: copies the editor's current content to the clipboard.
+- `cargo-llvm-cov` (+ `llvm-tools-preview`) pre-installed in the `Dockerfile`'s `builder` stage, so `docker compose --profile test run --rm test cargo llvm-cov --lib ...` produces a terminal summary or an HTML/lcov report for the native test suite. Wired into CI's `test` job too (`lcov.info` uploaded as an artifact).
+- `cargo-home` named volume (`$CARGO_HOME`) for the `dev`/`test` services, seeded from the image on first use: installing a new dev tool at runtime (e.g. `cargo install` inside the container) now persists across container recreations without a `Dockerfile` change/rebuild.
+
+### Fixed
+- The `chromedriver` service was being rebuilt reflexively even though its stage has no dependency on the app's source (just chromium/chromedriver from apt) -- it never needed it. The `test` service now bind-mounts the source like `dev` too, so ordinary code changes no longer require `--build` at all, only changes to `Cargo.toml`/the `Dockerfile` itself do.
+
+### Notes
+- Coverage is native-only (the pure-logic `cargo test --lib` suite); the browser-driven `tests/ui.rs` suite isn't instrumented for coverage or wired into CI yet, since neither is currently worth the added complexity for four DOM-interaction tests.
+
 ## [0.10.0] - Batch 2/3: Robustness
 
 ### Added

@@ -5,10 +5,14 @@ FROM rust:1.93.1-slim-bookworm AS builder
 
 # wasm-bindgen-cli's version must match the `wasm-bindgen` dependency in
 # Cargo.toml (it provides wasm-bindgen-test-runner, used to run the
-# tests/ui.rs integration suite -- see the `test` service in compose.yaml).
+# tests/ui.rs integration suite). cargo-llvm-cov + llvm-tools-preview
+# generate coverage for `cargo test --lib`. Both used by the `test`
+# service in compose.yaml.
 RUN rustup target add wasm32-unknown-unknown \
+    && rustup component add llvm-tools-preview \
     && cargo install trunk --locked \
-    && cargo install wasm-bindgen-cli --version 0.2.127 --locked
+    && cargo install wasm-bindgen-cli --version 0.2.127 --locked \
+    && cargo install cargo-llvm-cov --locked
 
 WORKDIR /app
 COPY Cargo.toml Cargo.lock index.html rust-toolchain.toml Trunk.toml ./

@@ -98,6 +98,89 @@ pub fn find_matches(graph: &Graph, query: &str) -> HashSet<usize> {
         .collect()
 }
 
+const STORAGE_FORMAT_KEY: &str = "json-ruster:format";
+const STORAGE_INPUT_KEY: &str = "json-ruster:input";
+const STORAGE_THEME_KEY: &str = "json-ruster:theme";
+
+fn local_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok()?
+}
+
+/// Falls back to dark if the OS preference can't be read at all (e.g. very
+/// old browsers), matching the app's original always-dark default.
+fn prefers_dark_theme() -> bool {
+    web_sys::window()
+        .and_then(|w| w.match_media("(prefers-color-scheme: dark)").ok().flatten())
+        .map(|mql| mql.matches())
+        .unwrap_or(true)
+}
+
+fn initial_theme() -> bool {
+    if let Some(Some(value)) = local_storage().map(|s| s.get_item(STORAGE_THEME_KEY).ok().flatten())
+    {
+        return value == "dark";
+    }
+    prefers_dark_theme()
+}
+
+/// A shared link encodes the format and raw text in the URL fragment
+/// (`#format=Json&data=...`), so opening it reconstructs the same document
+/// without any server round-trip.
+fn parse_share_hash() -> Option<(Format, String)> {
+    let hash = web_sys::window()?.location().hash().ok()?;
+    let hash = hash.strip_prefix('#')?;
+    let mut format = None;
+    let mut data = None;
+    for pair in hash.split('&') {
+        let (k, v) = pair.split_once('=')?;
+        match k {
+            "format" => format = Format::from_label(v),
+            "data" => {
+                data = js_sys::decode_uri_component(v)
+                    .ok()
+                    .and_then(|s| s.as_string())
+            }
+            _ => {}
+        }
+    }
+    Some((format?, data?))
+}
+
+fn share_url(format: Format, input: &str) -> String {
+    let href = web_sys::window()
+        .and_then(|w| w.location().href().ok())
+        .unwrap_or_default();
+    let base = href.split('#').next().unwrap_or(&href);
+    let encoded = js_sys::encode_uri_component(input)
+        .as_string()
+        .unwrap_or_default();
+    format!("{base}#format={}&data={encoded}", format.label())
+}
+
+/// Initial (format, text) for the editor: a share link in the URL wins,
+/// then whatever was last saved locally, then the default JSON sample.
+fn initial_document() -> (Format, String) {
+    if let Some(shared) = parse_share_hash() {
+        return shared;
+    }
+    let storage = local_storage();
+    let format = storage
+        .as_ref()
+        .and_then(|s| s.get_item(STORAGE_FORMAT_KEY).ok().flatten())
+        .and_then(|s| Format::from_label(&s));
+    let input = storage.and_then(|s| s.get_item(STORAGE_INPUT_KEY).ok().flatten());
+    match (format, input) {
+        (Some(format), Some(input)) => (format, input),
+        _ => (Format::Json, Format::Json.sample().to_string()),
+    }
+}
+
+fn copy_to_clipboard(text: &str) {
+    if let Some(window) = web_sys::window() {
+        let _ = window.navigator().clipboard().write_text(text);
+    }
+}
+
 /// Clicks a throwaway `<a download>` link -- there is no direct "save file"
 /// API available to a plain WASM/CSR app.
 fn trigger_download(filename: &str, url: &str) {
@@ -274,11 +357,29 @@ fn render_static_svg(
 
 #[component]
 pub fn App() -> impl IntoView {
-    let (format, set_format) = signal(Format::Json);
-    let (input, set_input) = signal(Format::Json.sample().to_string());
+    let (initial_format, initial_input) = initial_document();
+    let (format, set_format) = signal(initial_format);
+    let (input, set_input) = signal(initial_input);
     let (convert_target, set_convert_target) = signal(Format::Yaml);
     let (convert_error, set_convert_error) = signal(None::<String>);
-    let (is_dark, set_is_dark) = signal(true);
+    let (is_dark, set_is_dark) = signal(initial_theme());
+    let (copied, set_copied) = signal(false);
+    let (share_copied, set_share_copied) = signal(false);
+
+    // Remember the current document and theme locally so a reload picks up
+    // where the user left off.
+    Effect::new(move |_| {
+        if let Some(storage) = local_storage() {
+            let _ = storage.set_item(STORAGE_FORMAT_KEY, format.get().label());
+            let _ = storage.set_item(STORAGE_INPUT_KEY, &input.get());
+        }
+    });
+    Effect::new(move |_| {
+        if let Some(storage) = local_storage() {
+            let value = if is_dark.get() { "dark" } else { "light" };
+            let _ = storage.set_item(STORAGE_THEME_KEY, value);
+        }
+    });
     // `search_input` mirrors the box immediately for a responsive typing
     // feel; `search` (fed into GraphView) only updates ~200ms after the
     // user stops typing, since find_matches rescans every node on every
@@ -328,6 +429,32 @@ pub fn App() -> impl IntoView {
         }
     };
 
+    let on_copy_click = move |_| {
+        copy_to_clipboard(&input.get_untracked());
+        set_copied.set(true);
+        set_timeout(
+            move || set_copied.set(false),
+            std::time::Duration::from_millis(1200),
+        );
+    };
+
+    let on_share_click = move |_| {
+        let current_format = format.get_untracked();
+        let current_input = input.get_untracked();
+        if let Some(location) = web_sys::window().map(|w| w.location()) {
+            let encoded = js_sys::encode_uri_component(&current_input)
+                .as_string()
+                .unwrap_or_default();
+            let _ = location.set_hash(&format!("format={}&data={encoded}", current_format.label()));
+        }
+        copy_to_clipboard(&share_url(current_format, &current_input));
+        set_share_copied.set(true);
+        set_timeout(
+            move || set_share_copied.set(false),
+            std::time::Duration::from_millis(1200),
+        );
+    };
+
     view! {
         <div style=move || format!(
             "display:flex; flex-direction:column; height:100vh; width:100vw; font-family: sans-serif; background:{};",
@@ -368,6 +495,15 @@ pub fn App() -> impl IntoView {
                         .collect::<Vec<_>>()}
                 </select>
                 <button style=move || control_style(theme()) on:click=on_convert_click>"Convert"</button>
+
+                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
+
+                <button style=move || control_style(theme()) on:click=on_copy_click>
+                    {move || if copied.get() { "Copied!" } else { "Copy" }}
+                </button>
+                <button style=move || control_style(theme()) on:click=on_share_click title="Copy a shareable link to this document">
+                    {move || if share_copied.get() { "Link copied!" } else { "Share" }}
+                </button>
 
                 <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
 

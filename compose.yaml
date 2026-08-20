@@ -18,13 +18,17 @@ services:
       - "8080:8080"
     volumes:
       - .:/app
+      - cargo-home:/usr/local/cargo
     command: trunk serve --address 0.0.0.0 --port 8080
 
   # Dev/test tooling only, not part of the production stack: standalone
   # chromedriver + chromium for the wasm-bindgen-test integration suite
-  # (tests/ui.rs). Paired with the `test` service below, both on the
-  # regular compose bridge network -- no --network host, and no cargo/rust
-  # command ever runs on the host, only inside these containers.
+  # (tests/ui.rs). This stage never depends on the app's source (it's just
+  # chromium + chromedriver from apt), so it never needs rebuilding for a
+  # code change -- only if the `chromedriver` stage of the Dockerfile itself
+  # changes. Paired with the `test` service below, both on the regular
+  # compose bridge network -- no --network host, and no cargo/rust command
+  # ever runs on the host, only inside these containers.
   chromedriver:
     profiles: ["test"]
     build:
@@ -35,8 +39,11 @@ services:
       - SYS_ADMIN
 
   # Runs the wasm-bindgen-test integration suite (tests/ui.rs) against the
-  # chromedriver service above, using the same builder stage/toolchain as
-  # the production image. Usage: `docker compose --profile test run --rm test`.
+  # chromedriver service above. Source is bind-mounted like `dev`, so a
+  # plain `docker compose --profile test run --rm test` picks up code
+  # changes and reuses `target/`'s incremental build cache -- rebuilding
+  # the image (`--build`) is only needed after touching Cargo.toml/the
+  # Dockerfile itself, not for ordinary source edits.
   test:
     profiles: ["test"]
     build:
@@ -46,6 +53,17 @@ services:
       - chromedriver
     environment:
       CHROMEDRIVER_REMOTE: "http://chromedriver:9515"
+    volumes:
+      - .:/app
+      - cargo-home:/usr/local/cargo
     command: >
       sh -c "WASM_BINDGEN_TEST_ADDRESS=$$(hostname -i):8765
       cargo test --target wasm32-unknown-unknown --test ui"
+
+volumes:
+  # $CARGO_HOME (registry cache + `cargo install`ed binaries: trunk,
+  # wasm-bindgen-cli, cargo-llvm-cov). Persists across container
+  # recreations, seeded from the image on first use, so installing a new
+  # dev tool with `docker compose run dev cargo install ...` sticks around
+  # without a Dockerfile change/rebuild.
+  cargo-home:

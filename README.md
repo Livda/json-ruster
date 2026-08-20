@@ -46,7 +46,7 @@ cargo test --lib
 - **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format.
 - **Export**: "Export SVG"/"Export PNG" (top-right of the graph panel) download the full graph — independent of the current pan/zoom — as a standalone file.
 - **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable.
-- **Theme**: "Light theme"/"Dark theme" toggles the whole UI, including exported SVG/PNG files.
+- **Theme**: the moon/sun icon (top-right) toggles the whole UI, including exported SVG/PNG files.
 
 ## Roadmap
 

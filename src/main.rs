@@ -340,12 +340,6 @@ fn App() -> impl IntoView {
                     on:input=move |ev| set_search.set(event_target_value(&ev))
                 />
 
-                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
-
-                <button style=move || control_style(theme()) on:click=move |_| set_is_dark.update(|d| *d = !*d)>
-                    {move || if is_dark.get() { "Light theme" } else { "Dark theme" }}
-                </button>
-
                 {move || convert_error.get().map(|e| {
                     let color = theme().error_color;
                     view! {
@@ -377,6 +371,19 @@ fn App() -> impl IntoView {
                     }}
                 </div>
             </div>
+            <button
+                title="Toggle theme"
+                on:click=move |_| set_is_dark.update(|d| *d = !*d)
+                style=move || format!(
+                    "position:fixed; top:10px; right:10px; z-index:10; width:32px; height:32px; \
+                     border-radius:50%; border:1px solid {}; background:{}; color:{}; \
+                     font-size:16px; line-height:1; cursor:pointer; display:flex; \
+                     align-items:center; justify-content:center;",
+                    theme().toolbar_border, theme().toolbar_bg, theme().toolbar_text
+                )
+            >
+                {move || if is_dark.get() { "\u{1F319}" } else { "\u{2600}\u{FE0F}" }}
+            </button>
         </div>
     }
 }

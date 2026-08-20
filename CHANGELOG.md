@@ -4,6 +4,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.4] - CI/coverage badges
+
+### Added
+- README badges for CI status (GitHub's native workflow badge) and line coverage (a `shields.io` endpoint badge reading `.github/badges/coverage.json`, regenerated and committed back to `main` by the `test` job on every push there).
+
 ## [0.11.3] - Fullscreen mode
 
 ### Added

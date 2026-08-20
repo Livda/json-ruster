@@ -1,6 +1,8 @@
 # json-ruster
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![CI](https://github.com/Livda/json-ruster/actions/workflows/ci.yml/badge.svg)](https://github.com/Livda/json-ruster/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Livda/json-ruster/main/.github/badges/coverage.json)](https://github.com/Livda/json-ruster/actions/workflows/ci.yml)
 
 > Interactive JSON/YAML/XML/CSV/TOML tree viewer — a Rust/WASM take on JSON Crack, no backend.
 

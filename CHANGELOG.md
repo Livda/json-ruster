@@ -7,7 +7,8 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0
 ### Corrigé
 - Chevauchement vertical des boîtes quand un nœud a plus de champs que la hauteur de ligne fixe ne le permettait : la hauteur de chaque rangée est maintenant calculée dynamiquement (hauteur du plus grand nœud de la rangée précédente), au lieu d'une constante `LEVEL_HEIGHT`.
 - Débordement du texte hors des boîtes pour les valeurs très longues (ex. paragraphes de texte) : les lignes "clé: valeur" et le titre sont tronqués à 48 caractères (`layout::truncate_display` / `field_text`).
-- L'infobulle native (`<title>` SVG) ne s'affichait pas au survol (conflit avec la balise HTML `<title>` dans Leptos) : remplacée par un marqueur `[...]` cliquable qui ouvre un panneau affichant le texte complet.
+- L'infobulle native (`<title>` SVG) ne s'affichait pas au survol (conflit avec la balise HTML `<title>` dans Leptos) : remplacée par un marqueur `[...]` cliquable.
+- Le marqueur `[...]` ouvrait le texte complet dans un panneau déporté en bas du graphe plutôt qu'en place : cliquer dessus déplie maintenant la ligne dans la boîte elle-même (texte enroulé sur plusieurs lignes via `layout::wrap_text`, la boîte grandit en hauteur), avec un marqueur `[-]` pour la replier. Suivi par `FieldRef`/`layout::layout` (nouveau paramètre `expanded`).
 
 ## [0.3.0] - Jalon 3 — Multi-formats
 

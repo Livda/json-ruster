@@ -9,19 +9,30 @@ pub struct NodeLayout {
     pub height: f64,
 }
 
-const VERTICAL_SPACING: f64 = 40.0;
+/// Identifies a single displayed line within a node: either its title or
+/// one of its "key: value" fields. Used as the key for tracking which
+/// lines are expanded to show their full (untruncated) text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FieldRef {
+    Title,
+    Field(usize),
+}
+
+pub const VERTICAL_SPACING: f64 = 40.0;
 const SIBLING_SPACING: f64 = 40.0;
-const LINE_HEIGHT: f64 = 20.0;
+pub const LINE_HEIGHT: f64 = 20.0;
 const CHAR_WIDTH: f64 = 8.0;
 const BOX_PADDING: f64 = 12.0;
 const MIN_WIDTH: f64 = 100.0;
 
 /// Max characters shown for a title or "key: value" line before it is
 /// truncated. Keeps box width bounded regardless of how long the
-/// underlying data is; the renderer appends a clickable `MORE_MARKER` that
-/// reveals the full text, and its width is accounted for here too.
+/// underlying data is: the renderer appends a clickable `MORE_MARKER` that
+/// expands the line in place (wrapped over several lines), and its width
+/// is accounted for here too.
 pub const MAX_FIELD_CHARS: usize = 48;
 pub const MORE_MARKER: &str = " [...]";
+pub const LESS_MARKER: &str = " [-]";
 
 /// Truncates `s` to `MAX_FIELD_CHARS`, returning the truncated text and
 /// whether truncation happened (so the caller can decide how to surface
@@ -35,17 +46,34 @@ pub fn truncate_display(s: &str) -> (String, bool) {
     }
 }
 
-pub fn field_text(key: &str, value: &str) -> (String, bool) {
-    let full = if key.is_empty() {
+/// Splits `s` into `MAX_FIELD_CHARS`-wide chunks, used to render an
+/// expanded line over several rows without growing the box width.
+pub fn wrap_text(s: &str) -> Vec<String> {
+    if s.is_empty() {
+        return vec![String::new()];
+    }
+    let chars: Vec<char> = s.chars().collect();
+    chars.chunks(MAX_FIELD_CHARS).map(|c| c.iter().collect()).collect()
+}
+
+pub fn field_full_text(key: &str, value: &str) -> String {
+    if key.is_empty() {
         value.to_string()
     } else {
         format!("{key}: {value}")
-    };
-    truncate_display(&full)
+    }
 }
 
 fn display_width_chars(text: &str, truncated: bool) -> usize {
     text.chars().count() + if truncated { MORE_MARKER.chars().count() } else { 0 }
+}
+
+fn line_count(text: &str, expanded: bool) -> usize {
+    if expanded {
+        wrap_text(text).len().max(1)
+    } else {
+        1
+    }
 }
 
 /// Simplified Reingold-Tilford style tree layout: leaves are placed left to
@@ -55,17 +83,22 @@ fn display_width_chars(text: &str, truncated: bool) -> usize {
 ///
 /// Rows are placed at a dynamic y-offset based on the tallest node seen at
 /// each depth so far, rather than a fixed row height: a node with many
-/// fields can be taller than a single row, and a fixed height would let the
-/// next row overlap it.
+/// fields (or an expanded line) can be taller than a single row, and a
+/// fixed height would let the next row overlap it.
 ///
 /// Nodes whose id is in `collapsed` are laid out as leaves: their children
 /// are skipped entirely, so the returned map only contains currently
-/// visible nodes.
-pub fn layout(graph: &Graph, collapsed: &HashSet<usize>) -> HashMap<usize, NodeLayout> {
+/// visible nodes. `expanded` lists which (node id, field) lines are shown
+/// in full (wrapped) rather than truncated, which grows that node's height.
+pub fn layout(
+    graph: &Graph,
+    collapsed: &HashSet<usize>,
+    expanded: &HashSet<(usize, FieldRef)>,
+) -> HashMap<usize, NodeLayout> {
     let sizes: HashMap<usize, (f64, f64)> = graph
         .nodes
         .iter()
-        .map(|node| (node.id, node_size(node)))
+        .map(|node| (node.id, node_size(node, expanded)))
         .collect();
 
     let mut x_by_id: HashMap<usize, f64> = HashMap::new();
@@ -123,15 +156,29 @@ fn children_of<'a>(graph: &'a Graph, collapsed: &HashSet<usize>, id: usize) -> &
     }
 }
 
-fn node_size(node: &GraphNode) -> (f64, f64) {
-    let field_lines = node.fields.len().max(1);
-    let lines = 1 + field_lines; // title + fields
+fn node_size(node: &GraphNode, expanded: &HashSet<(usize, FieldRef)>) -> (f64, f64) {
+    let title_lines = line_count(&node.title, expanded.contains(&(node.id, FieldRef::Title)));
+
+    let field_lines: usize = if node.fields.is_empty() {
+        1
+    } else {
+        node.fields
+            .iter()
+            .enumerate()
+            .map(|(i, (k, v))| {
+                let is_expanded = expanded.contains(&(node.id, FieldRef::Field(i)));
+                line_count(&field_full_text(k, v), is_expanded)
+            })
+            .sum()
+    };
+
+    let lines = title_lines + field_lines;
 
     let max_chars = node
         .fields
         .iter()
         .map(|(k, v)| {
-            let (display, truncated) = field_text(k, v);
+            let (display, truncated) = truncate_display(&field_full_text(k, v));
             display_width_chars(&display, truncated)
         })
         .chain(std::iter::once({
@@ -177,30 +224,60 @@ mod tests {
     use crate::graph::build_graph;
     use crate::model::DataNode;
 
+    fn no_collapsed() -> HashSet<usize> {
+        HashSet::new()
+    }
+
+    fn no_expanded() -> HashSet<(usize, FieldRef)> {
+        HashSet::new()
+    }
+
     #[test]
-    fn field_text_truncates_long_values() {
+    fn truncate_display_truncates_long_text() {
         let long_value = "a".repeat(200);
-        let (text, truncated) = field_text("about", &long_value);
-        assert!(text.chars().count() <= MAX_FIELD_CHARS);
+        let (text, truncated) = truncate_display(&long_value);
+        assert_eq!(text.chars().count(), MAX_FIELD_CHARS);
         assert!(truncated);
     }
 
     #[test]
-    fn field_text_reports_no_truncation_for_short_values() {
-        let (text, truncated) = field_text("a", "1");
+    fn truncate_display_reports_no_truncation_for_short_text() {
+        let (text, truncated) = truncate_display("a: 1");
         assert_eq!(text, "a: 1");
         assert!(!truncated);
+    }
+
+    #[test]
+    fn wrap_text_splits_into_max_field_chars_chunks() {
+        let long_value = "a".repeat(100);
+        let lines = wrap_text(&long_value);
+        assert_eq!(lines.len(), 3); // 48 + 48 + 4
+        assert!(lines.iter().all(|l| l.chars().count() <= MAX_FIELD_CHARS));
     }
 
     #[test]
     fn node_width_is_bounded_for_long_field_values() {
         let data = DataNode::Object(vec![("about".into(), DataNode::Scalar("a".repeat(2000)))]);
         let graph = build_graph(&data);
-        let positions = layout(&graph, &HashSet::new());
+        let positions = layout(&graph, &no_collapsed(), &no_expanded());
         let width = positions[&graph.root].width;
         let max_chars = MAX_FIELD_CHARS + MORE_MARKER.chars().count();
         let max_expected = max_chars as f64 * CHAR_WIDTH + BOX_PADDING * 2.0;
         assert!(width <= max_expected, "width {width} exceeded {max_expected}");
+    }
+
+    #[test]
+    fn expanding_a_field_grows_node_height_without_growing_width() {
+        let data = DataNode::Object(vec![("about".into(), DataNode::Scalar("a".repeat(200)))]);
+        let graph = build_graph(&data);
+        let collapsed_positions = layout(&graph, &no_collapsed(), &no_expanded());
+
+        let mut expanded = HashSet::new();
+        expanded.insert((graph.root, FieldRef::Field(0)));
+        let expanded_positions = layout(&graph, &no_collapsed(), &expanded);
+
+        assert!(expanded_positions[&graph.root].height > collapsed_positions[&graph.root].height);
+        assert_eq!(expanded_positions[&graph.root].width, collapsed_positions[&graph.root].width);
     }
 
     #[test]
@@ -216,7 +293,7 @@ mod tests {
             ),
         ]);
         let graph = build_graph(&data);
-        let positions = layout(&graph, &HashSet::new());
+        let positions = layout(&graph, &no_collapsed(), &no_expanded());
 
         let a_id = graph.nodes[graph.root].children[0];
         let b_id = graph.nodes[graph.root].children[1];
@@ -241,7 +318,7 @@ mod tests {
             ),
         ]);
         let graph = build_graph(&data);
-        let positions = layout(&graph, &HashSet::new());
+        let positions = layout(&graph, &no_collapsed(), &no_expanded());
 
         let root = positions[&graph.root];
         let child_id = graph.nodes[graph.root].children[0];
@@ -268,7 +345,7 @@ mod tests {
 
         let mut collapsed = HashSet::new();
         collapsed.insert(author_id);
-        let positions = layout(&graph, &collapsed);
+        let positions = layout(&graph, &collapsed, &no_expanded());
 
         assert!(positions.contains_key(&graph.root));
         assert!(positions.contains_key(&author_id));

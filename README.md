@@ -43,6 +43,10 @@ Pure modules (parsers, layout) are tested outside the browser:
 cargo test --lib
 ```
 
+## CI
+
+`.gitlab-ci.yml` runs on GitLab CI: `fmt`/`clippy` (lint), `cargo test --lib` (test), `trunk build --release` (build, published as an artifact), then `docker build`/`push` to the project's container registry on the default branch (build/push credentials come from GitLab's predefined `CI_REGISTRY*` variables, no extra setup needed).
+
 ## Architecture
 
 - `src/model.rs` — unified internal data representation (`DataNode`), the pivot between all formats.
@@ -73,3 +77,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 4. **Conversion & export** — format conversion, SVG export, PNG export. ✅
 5. **Stretch** — light/dark theme ✅, search ✅, syntax-highlighting editor (not planned: would need a JS dependency like CodeMirror, out of scope for a pure-Rust/WASM app).
 6. **Docker** — multi-stage `Dockerfile` (Trunk build + nginx runtime) for a production image, plus `compose.yaml`. ✅
+7. **CI** — GitLab CI pipeline: lint (fmt/clippy), test, build (Trunk), build & push a production Docker image. ✅

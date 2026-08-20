@@ -25,7 +25,12 @@ pub fn parse_xml(input: &str) -> Result<DataNode, String> {
 fn from_element(node: Node) -> DataNode {
     let mut fields: Vec<(String, DataNode)> = node
         .attributes()
-        .map(|attr| (format!("@{}", attr.name()), DataNode::Scalar(attr.value().to_string())))
+        .map(|attr| {
+            (
+                format!("@{}", attr.name()),
+                DataNode::Scalar(attr.value().to_string()),
+            )
+        })
         .collect();
 
     let child_elements: Vec<Node> = node.children().filter(|c| c.is_element()).collect();

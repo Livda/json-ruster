@@ -53,7 +53,10 @@ pub fn wrap_text(s: &str) -> Vec<String> {
         return vec![String::new()];
     }
     let chars: Vec<char> = s.chars().collect();
-    chars.chunks(MAX_FIELD_CHARS).map(|c| c.iter().collect()).collect()
+    chars
+        .chunks(MAX_FIELD_CHARS)
+        .map(|c| c.iter().collect())
+        .collect()
 }
 
 pub fn field_full_text(key: &str, value: &str) -> String {
@@ -65,7 +68,12 @@ pub fn field_full_text(key: &str, value: &str) -> String {
 }
 
 fn display_width_chars(text: &str, truncated: bool) -> usize {
-    text.chars().count() + if truncated { MORE_MARKER.chars().count() } else { 0 }
+    text.chars().count()
+        + if truncated {
+            MORE_MARKER.chars().count()
+        } else {
+            0
+        }
 }
 
 fn line_count(text: &str, expanded: bool) -> usize {
@@ -103,7 +111,14 @@ pub fn layout(
 
     let mut x_by_id: HashMap<usize, f64> = HashMap::new();
     let mut next_x = 0.0f64;
-    assign_x(graph, graph.root, collapsed, &sizes, &mut next_x, &mut x_by_id);
+    assign_x(
+        graph,
+        graph.root,
+        collapsed,
+        &sizes,
+        &mut next_x,
+        &mut x_by_id,
+    );
 
     let mut depth_by_id: HashMap<usize, usize> = HashMap::new();
     collect_depths(graph, graph.root, collapsed, 0, &mut depth_by_id);
@@ -263,7 +278,10 @@ mod tests {
         let width = positions[&graph.root].width;
         let max_chars = MAX_FIELD_CHARS + MORE_MARKER.chars().count();
         let max_expected = max_chars as f64 * CHAR_WIDTH + BOX_PADDING * 2.0;
-        assert!(width <= max_expected, "width {width} exceeded {max_expected}");
+        assert!(
+            width <= max_expected,
+            "width {width} exceeded {max_expected}"
+        );
     }
 
     #[test]
@@ -277,7 +295,10 @@ mod tests {
         let expanded_positions = layout(&graph, &no_collapsed(), &expanded);
 
         assert!(expanded_positions[&graph.root].height > collapsed_positions[&graph.root].height);
-        assert_eq!(expanded_positions[&graph.root].width, collapsed_positions[&graph.root].width);
+        assert_eq!(
+            expanded_positions[&graph.root].width,
+            collapsed_positions[&graph.root].width
+        );
     }
 
     #[test]
@@ -349,6 +370,10 @@ mod tests {
 
         assert!(positions.contains_key(&graph.root));
         assert!(positions.contains_key(&author_id));
-        assert_eq!(positions.len(), 2, "grandchildren of a collapsed node must not be laid out");
+        assert_eq!(
+            positions.len(),
+            2,
+            "grandchildren of a collapsed node must not be laid out"
+        );
     }
 }

@@ -90,9 +90,9 @@ fn find_matches(graph: &Graph, query: &str) -> HashSet<usize> {
         .iter()
         .filter(|n| {
             n.title.to_lowercase().contains(query)
-                || n.fields
-                    .iter()
-                    .any(|(k, v)| k.to_lowercase().contains(query) || v.to_lowercase().contains(query))
+                || n.fields.iter().any(|(k, v)| {
+                    k.to_lowercase().contains(query) || v.to_lowercase().contains(query)
+                })
         })
         .map(|n| n.id)
         .collect()
@@ -144,10 +144,10 @@ fn export_png(svg_markup: &str, width: f64, height: f64) {
         let Some(document) = web_sys::window().and_then(|w| w.document()) else {
             return;
         };
-        let Ok(canvas) = document
-            .create_element("canvas")
-            .and_then(|c| c.dyn_into::<web_sys::HtmlCanvasElement>().map_err(Into::into))
-        else {
+        let Ok(canvas) = document.create_element("canvas").and_then(|c| {
+            c.dyn_into::<web_sys::HtmlCanvasElement>()
+                .map_err(Into::into)
+        }) else {
             return;
         };
         canvas.set_width(width as u32);
@@ -158,7 +158,10 @@ fn export_png(svg_markup: &str, width: f64, height: f64) {
         let Ok(ctx) = ctx.dyn_into::<web_sys::CanvasRenderingContext2d>() else {
             return;
         };
-        if ctx.draw_image_with_html_image_element(&img_for_draw, 0.0, 0.0).is_ok() {
+        if ctx
+            .draw_image_with_html_image_element(&img_for_draw, 0.0, 0.0)
+            .is_ok()
+        {
             if let Ok(png_url) = canvas.to_data_url_with_type("image/png") {
                 trigger_download("graph.png", &png_url);
             }
@@ -169,7 +172,9 @@ fn export_png(svg_markup: &str, width: f64, height: f64) {
 }
 
 fn escape_xml_text(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 /// Renders the graph as a standalone SVG document, independent of the
@@ -184,8 +189,16 @@ fn render_static_svg(
     expanded: &HashSet<(usize, FieldRef)>,
     theme: Theme,
 ) -> (String, f64, f64) {
-    let width = positions.values().map(|p| p.x + p.width).fold(0.0_f64, f64::max) + 40.0;
-    let height = positions.values().map(|p| p.y + p.height).fold(0.0_f64, f64::max) + 40.0;
+    let width = positions
+        .values()
+        .map(|p| p.x + p.width)
+        .fold(0.0_f64, f64::max)
+        + 40.0;
+    let height = positions
+        .values()
+        .map(|p| p.y + p.height)
+        .fold(0.0_f64, f64::max)
+        + 40.0;
 
     let mut svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {width} {height}\">\n\
@@ -268,7 +281,13 @@ fn App() -> impl IntoView {
     let (is_dark, set_is_dark) = signal(true);
     let (search, set_search) = signal(String::new());
 
-    let theme = move || if is_dark.get() { Theme::dark() } else { Theme::light() };
+    let theme = move || {
+        if is_dark.get() {
+            Theme::dark()
+        } else {
+            Theme::light()
+        }
+    };
 
     let parsed = Memo::new(move |_| parsers::parse(format.get(), &input.get()));
 
@@ -297,7 +316,9 @@ fn App() -> impl IntoView {
                 }
                 Err(e) => set_convert_error.set(Some(e)),
             },
-            Err(_) => set_convert_error.set(Some("Fix the parsing error before converting".to_string())),
+            Err(_) => {
+                set_convert_error.set(Some("Fix the parsing error before converting".to_string()))
+            }
         }
     };
 
@@ -439,13 +460,14 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     // been unmounted (e.g. a new GraphView is mounted after a format
     // change), which panics on a disposed signal the next time the mouse
     // moves anywhere on the page.
-    let pointermove_handle = window_event_listener(leptos::ev::pointermove, move |ev: PointerEvent| {
-        if is_dragging.get_untracked() {
-            let (sx, sy, start_tx, start_ty) = drag_start.get_value();
-            set_tx.set(start_tx + (ev.client_x() as f64 - sx));
-            set_ty.set(start_ty + (ev.client_y() as f64 - sy));
-        }
-    });
+    let pointermove_handle =
+        window_event_listener(leptos::ev::pointermove, move |ev: PointerEvent| {
+            if is_dragging.get_untracked() {
+                let (sx, sy, start_tx, start_ty) = drag_start.get_value();
+                set_tx.set(start_tx + (ev.client_x() as f64 - sx));
+                set_ty.set(start_ty + (ev.client_y() as f64 - sy));
+            }
+        });
     let pointerup_handle = window_event_listener(leptos::ev::pointerup, move |_: PointerEvent| {
         set_is_dragging.set(false);
     });
@@ -578,13 +600,20 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     }
 }
 
-fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>, theme: Theme) -> Vec<impl IntoView> {
+fn render_edges(
+    graph: &Graph,
+    positions: &HashMap<usize, NodeLayout>,
+    theme: Theme,
+) -> Vec<impl IntoView> {
     positions
         .keys()
         .flat_map(|&id| {
             let from = positions[&id];
-            graph.nodes[id].children.iter().filter_map(move |&child_id| {
-                positions.get(&child_id).map(|&to| {
+            graph.nodes[id]
+                .children
+                .iter()
+                .filter_map(move |&child_id| {
+                    positions.get(&child_id).map(|&to| {
                     let x1 = from.x + from.width / 2.0;
                     let y1 = from.y + from.height;
                     let x2 = to.x + to.width / 2.0;
@@ -593,7 +622,7 @@ fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>, theme: Th
                     let d = format!("M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}");
                     view! { <path d=d fill="none" stroke=theme.edge_color stroke-width="1.5" /> }
                 })
-            })
+                })
         })
         .collect::<Vec<_>>()
 }
@@ -603,6 +632,7 @@ fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>, theme: Th
 /// `expanded_set` -- wrapped in place over several lines with a trailing
 /// clickable `[-]` marker to collapse it back. Returns the views and how
 /// many lines they occupy, so the caller can position what comes next.
+#[allow(clippy::too_many_arguments)]
 fn truncatable_lines(
     x: &'static str,
     start_y: f64,
@@ -668,6 +698,7 @@ fn truncatable_lines(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_nodes(
     graph: &Graph,
     positions: &HashMap<usize, NodeLayout>,

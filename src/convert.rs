@@ -44,14 +44,19 @@ fn to_json(data: &DataNode) -> Result<String, String> {
 fn to_json_value(node: &DataNode) -> serde_json::Value {
     use serde_json::Value;
     match node {
-        DataNode::Object(entries) => {
-            Value::Object(entries.iter().map(|(k, v)| (k.clone(), to_json_value(v))).collect())
-        }
+        DataNode::Object(entries) => Value::Object(
+            entries
+                .iter()
+                .map(|(k, v)| (k.clone(), to_json_value(v)))
+                .collect(),
+        ),
         DataNode::Array(items) => Value::Array(items.iter().map(to_json_value).collect()),
         DataNode::Null => Value::Null,
         DataNode::Scalar(s) => match infer_scalar(s) {
             Scalar::Int(i) => Value::Number(i.into()),
-            Scalar::Float(f) => serde_json::Number::from_f64(f).map(Value::Number).unwrap_or(Value::String(s.clone())),
+            Scalar::Float(f) => serde_json::Number::from_f64(f)
+                .map(Value::Number)
+                .unwrap_or(Value::String(s.clone())),
             Scalar::Bool(b) => Value::Bool(b),
             Scalar::Null => Value::Null,
             Scalar::Text(t) => Value::String(t),
@@ -191,7 +196,9 @@ fn write_xml_element(out: &mut String, tag: &str, node: &DataNode, indent: usize
             }
             if children.is_empty() {
                 match text {
-                    Some(t) => out.push_str(&format!("{pad}<{tag}{attrs}>{}</{tag}>\n", escape_xml(t))),
+                    Some(t) => {
+                        out.push_str(&format!("{pad}<{tag}{attrs}>{}</{tag}>\n", escape_xml(t)))
+                    }
                     None => out.push_str(&format!("{pad}<{tag}{attrs} />\n")),
                 }
             } else {
@@ -213,7 +220,10 @@ fn write_xml_element(out: &mut String, tag: &str, node: &DataNode, indent: usize
 }
 
 fn escape_xml(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 #[cfg(test)]
@@ -223,7 +233,8 @@ mod tests {
 
     #[test]
     fn json_round_trips_types() {
-        let data = parsers::json::parse_json(r#"{"a": 1, "b": true, "c": null, "d": "x"}"#).unwrap();
+        let data =
+            parsers::json::parse_json(r#"{"a": 1, "b": true, "c": null, "d": "x"}"#).unwrap();
         let json = to_json(&data).unwrap();
         assert!(json.contains("\"a\": 1"));
         assert!(json.contains("\"b\": true"));
@@ -247,7 +258,8 @@ mod tests {
 
     #[test]
     fn json_array_of_objects_to_csv() {
-        let data = parsers::json::parse_json(r#"[{"a": "1", "b": "x"}, {"a": "2", "b": "y"}]"#).unwrap();
+        let data =
+            parsers::json::parse_json(r#"[{"a": "1", "b": "x"}, {"a": "2", "b": "y"}]"#).unwrap();
         let csv = to_csv(&data).unwrap();
         assert_eq!(csv, "a,b\n1,x\n2,y\n");
     }

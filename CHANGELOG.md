@@ -4,6 +4,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- Panic ("already been disposed") when a `window_event_listener` callback (pan drag) kept running after its `GraphView` was unmounted, e.g. right after a format change/conversion. `window_event_listener` does not auto-cleanup; the handle is now removed via `on_cleanup`.
+- Clicking a non-root node reset pan/zoom to the origin, jumping the view away from wherever the user was looking. Replaced with a precise fix: the toggle now shifts the pan by exactly the clicked node's layout-position delta, so it stays under the cursor regardless of how the rest of the layout reshuffles (this also fixes the original "root goes off-screen on a large document" report).
+- Stray blue underline rendered as a lone `_` before the `[...]`/`[-]` markers (the leading space in the marker text inherited `text-decoration:underline`). Dropped the underline.
+
+### Added
+- "Export SVG"/"Export PNG" buttons (top-right of the graph panel): render the graph as a standalone SVG document from the data itself -- independent of the live view's pan/zoom or panel size -- then download it directly, or draw it into an offscreen canvas and download a PNG (`render_static_svg` in `main.rs`).
+
 ## [0.4.0] - Milestone 4 — Conversion & export
 
 ### Added
@@ -12,7 +20,6 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 - "Export SVG" button: downloads the currently rendered graph as a standalone `.svg` file.
 
 ### Notes
-- PNG export is not implemented yet: it needs an async image-load round trip (draw the SVG into an offscreen `<img>`/`<canvas>` in WASM) that didn't fit this pass; left for a follow-up.
 - TOML has no null type, so `DataNode::Null` becomes an empty string when converting to TOML.
 - CSV export requires a top-level array of objects; nested object/array values inside a row are dropped (flattening them is out of scope for now).
 

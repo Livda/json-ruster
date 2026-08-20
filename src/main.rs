@@ -9,13 +9,23 @@ use json_ruster::parsers::{self, Format};
 use leptos::ev::{MouseEvent, PointerEvent, WheelEvent};
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
+use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 
-const GRAPH_SVG_ID: &str = "jr-graph-svg";
+/// Clicks a throwaway `<a download>` link -- there is no direct "save file"
+/// API available to a plain WASM/CSR app.
+fn trigger_download(filename: &str, url: &str) {
+    if let Some(document) = web_sys::window().and_then(|w| w.document()) {
+        if let Ok(element) = document.create_element("a") {
+            if let Ok(anchor) = element.dyn_into::<web_sys::HtmlAnchorElement>() {
+                anchor.set_href(url);
+                anchor.set_download(filename);
+                anchor.click();
+            }
+        }
+    }
+}
 
-/// Triggers a browser download of `contents` as `filename` by creating an
-/// object URL and clicking a throwaway `<a download>` link -- there is no
-/// direct "save file" API available to a plain WASM/CSR app.
 fn download_text(filename: &str, mime: &str, contents: &str) {
     let parts = js_sys::Array::new();
     parts.push(&wasm_bindgen::JsValue::from_str(contents));
@@ -27,27 +37,135 @@ fn download_text(filename: &str, mime: &str, contents: &str) {
     let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) else {
         return;
     };
-
-    if let Some(document) = web_sys::window().and_then(|w| w.document()) {
-        if let Ok(element) = document.create_element("a") {
-            if let Ok(anchor) = element.dyn_into::<web_sys::HtmlAnchorElement>() {
-                anchor.set_href(&url);
-                anchor.set_download(filename);
-                anchor.click();
-            }
-        }
-    }
+    trigger_download(filename, &url);
     let _ = web_sys::Url::revoke_object_url(&url);
 }
 
-fn export_svg() {
-    let Some(svg) = web_sys::window()
-        .and_then(|w| w.document())
-        .and_then(|d| d.get_element_by_id(GRAPH_SVG_ID))
-    else {
+/// Draws `svg_markup` (a standalone `<svg>...</svg>` document, with explicit
+/// pixel `width`/`height`) into an offscreen canvas and downloads the result
+/// as a PNG. Loading the SVG into an `<img>` is inherently async, so the
+/// download only happens once `onload` fires; the closure is leaked via
+/// `forget()` since it only ever needs to run once.
+fn export_png(svg_markup: &str, width: f64, height: f64) {
+    let Ok(img) = web_sys::HtmlImageElement::new() else {
         return;
     };
-    download_text("graph.svg", "image/svg+xml", &svg.outer_html());
+    let encoded = js_sys::encode_uri_component(svg_markup);
+    img.set_src(&format!("data:image/svg+xml;charset=utf-8,{encoded}"));
+
+    let img_for_draw = img.clone();
+    let onload = Closure::once(move || {
+        let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+            return;
+        };
+        let Ok(canvas) = document
+            .create_element("canvas")
+            .and_then(|c| c.dyn_into::<web_sys::HtmlCanvasElement>().map_err(Into::into))
+        else {
+            return;
+        };
+        canvas.set_width(width as u32);
+        canvas.set_height(height as u32);
+        let Ok(Some(ctx)) = canvas.get_context("2d") else {
+            return;
+        };
+        let Ok(ctx) = ctx.dyn_into::<web_sys::CanvasRenderingContext2d>() else {
+            return;
+        };
+        if ctx.draw_image_with_html_image_element(&img_for_draw, 0.0, 0.0).is_ok() {
+            if let Ok(png_url) = canvas.to_data_url_with_type("image/png") {
+                trigger_download("graph.png", &png_url);
+            }
+        }
+    });
+    img.set_onload(Some(onload.as_ref().unchecked_ref()));
+    onload.forget();
+}
+
+fn escape_xml_text(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
+}
+
+/// Renders the graph as a standalone SVG document, independent of the
+/// interactive view's current pan/zoom (so the export always shows the
+/// full graph, not whatever happens to be scrolled into view) and without
+/// the clickable expand/collapse affordances (a static export has nothing
+/// to click). Truncation/wrapping still mirrors `render_nodes` so the text
+/// fits the same box sizes computed by `layout::layout`.
+fn render_static_svg(
+    graph: &Graph,
+    positions: &HashMap<usize, NodeLayout>,
+    expanded: &HashSet<(usize, FieldRef)>,
+) -> (String, f64, f64) {
+    let width = positions.values().map(|p| p.x + p.width).fold(0.0_f64, f64::max) + 40.0;
+    let height = positions.values().map(|p| p.y + p.height).fold(0.0_f64, f64::max) + 40.0;
+
+    let mut svg = format!(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {width} {height}\">\n\
+         <rect width=\"{width}\" height=\"{height}\" fill=\"#0f1117\" />\n\
+         <g transform=\"translate(20, 20)\">\n"
+    );
+
+    for (&id, from) in positions {
+        for &child_id in &graph.nodes[id].children {
+            if let Some(to) = positions.get(&child_id) {
+                let x1 = from.x + from.width / 2.0;
+                let y1 = from.y + from.height;
+                let x2 = to.x + to.width / 2.0;
+                let y2 = to.y;
+                let mid_y = (y1 + y2) / 2.0;
+                svg.push_str(&format!(
+                    "<path d=\"M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}\" fill=\"none\" stroke=\"#4a5568\" stroke-width=\"1.5\" />\n"
+                ));
+            }
+        }
+    }
+
+    let mut ids: Vec<usize> = positions.keys().copied().collect();
+    ids.sort_unstable();
+    for id in ids {
+        let node = &graph.nodes[id];
+        let pos = positions[&id];
+        svg.push_str(&format!(
+            "<g transform=\"translate({}, {})\">\n<rect width=\"{}\" height=\"{}\" rx=\"6\" fill=\"#1a202c\" stroke=\"#4a5568\" stroke-width=\"1.5\" />\n",
+            pos.x, pos.y, pos.width, pos.height
+        ));
+
+        let title_lines = if expanded.contains(&(id, FieldRef::Title)) {
+            wrap_text(&node.title)
+        } else {
+            vec![truncate_display(&node.title).0]
+        };
+        for (i, line) in title_lines.iter().enumerate() {
+            let y = 16.0 + i as f64 * LINE_HEIGHT;
+            svg.push_str(&format!(
+                "<text x=\"10\" y=\"{y}\" fill=\"#63b3ed\" font-size=\"12\" font-family=\"monospace\" font-weight=\"bold\">{}</text>\n",
+                escape_xml_text(line)
+            ));
+        }
+
+        let mut y_cursor = 30.0 + (title_lines.len() as f64 - 1.0) * LINE_HEIGHT;
+        for (i, (k, v)) in node.fields.iter().enumerate() {
+            let full = field_full_text(k, v);
+            let lines = if expanded.contains(&(id, FieldRef::Field(i))) {
+                wrap_text(&full)
+            } else {
+                vec![truncate_display(&full).0]
+            };
+            for line in &lines {
+                svg.push_str(&format!(
+                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"#e2e8f0\" font-size=\"12\" font-family=\"monospace\">{}</text>\n",
+                    escape_xml_text(line)
+                ));
+                y_cursor += LINE_HEIGHT;
+            }
+        }
+
+        svg.push_str("</g>\n");
+    }
+
+    svg.push_str("</g>\n</svg>\n");
+    (svg, width, height)
 }
 
 #[component]
@@ -109,9 +227,6 @@ fn App() -> impl IntoView {
                         .collect::<Vec<_>>()}
                 </select>
                 <button on:click=on_convert_click>"Convert"</button>
-
-                <span style="color:#4a5568; margin:0 4px;">"|"</span>
-                <button on:click=move |_| export_svg()>"Export SVG"</button>
 
                 {move || convert_error.get().map(|e| view! {
                     <span style="color:#ff6b6b; font-size:12px;">{e}</span>
@@ -223,6 +338,23 @@ fn GraphView(data: DataNode) -> impl IntoView {
         });
     };
 
+    let render_export_svg = move || {
+        let collapsed_set = collapsed.get_untracked();
+        let expanded_set = expanded.get_untracked();
+        graph.with_value(|g| {
+            let positions = compute_layout(g, &collapsed_set, &expanded_set);
+            render_static_svg(g, &positions, &expanded_set)
+        })
+    };
+    let on_export_svg = move |_: MouseEvent| {
+        let (markup, _, _) = render_export_svg();
+        download_text("graph.svg", "image/svg+xml", &markup);
+    };
+    let on_export_png = move |_: MouseEvent| {
+        let (markup, width, height) = render_export_svg();
+        export_png(&markup, width, height);
+    };
+
     view! {
         <div
             style=move || format!(
@@ -232,14 +364,20 @@ fn GraphView(data: DataNode) -> impl IntoView {
             on:pointerdown=on_pointer_down
             on:wheel=on_wheel
         >
-            <div style="position:absolute; top:0; left:0; right:0; padding:6px 10px; font-family:monospace; font-size:12px; color:#a0aec0; background:rgba(15,17,23,0.85); z-index:1; pointer-events:none;">
-                {move || {
-                    selected.get()
-                        .map(|id| graph.with_value(|g| g.path_to(id)))
-                        .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
-                }}
+            <div style="position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:6px 10px; font-family:monospace; font-size:12px; color:#a0aec0; background:rgba(15,17,23,0.85); z-index:1;">
+                <span style="pointer-events:none;">
+                    {move || {
+                        selected.get()
+                            .map(|id| graph.with_value(|g| g.path_to(id)))
+                            .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
+                    }}
+                </span>
+                <span>
+                    <button on:click=on_export_svg>"Export SVG"</button>
+                    <button on:click=on_export_png>"Export PNG"</button>
+                </span>
             </div>
-            <svg id=GRAPH_SVG_ID xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+            <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
                 <g style=move || format!("transform: translate({}px, {}px) scale({})", tx.get(), ty.get(), scale.get())>
                     {move || {
                         let collapsed_set = collapsed.get();

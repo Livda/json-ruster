@@ -35,7 +35,7 @@ cargo test --lib
 - `src/graph.rs` — builds a tree of displayable nodes (`GraphNode`) from a `DataNode`, tracking parents and computing paths (`path_to`).
 - `src/layout.rs` — node positioning (simplified Reingold–Tilford-style algorithm), accounting for collapsed nodes and inline-expanded lines.
 - `src/convert.rs` — serializes a `DataNode` back to any supported format's text (JSON/YAML/XML/CSV/TOML), inferring numbers/booleans/null from scalar text.
-- `src/main.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection, conversion, SVG export).
+- `src/main.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection, conversion, SVG/PNG export).
 
 ## Interactions
 
@@ -44,7 +44,7 @@ cargo test --lib
 - **Collapse/expand**: click a node with children (`+N`/`-` indicator); the click also selects the node and shows its path at the top of the panel.
 - **Long values**: click the `[...]` marker to expand a truncated line in place (`[-]` to collapse it back).
 - **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format.
-- **Export**: "Export SVG" downloads the current graph as an `.svg` file.
+- **Export**: "Export SVG"/"Export PNG" (top-right of the graph panel) download the full graph — independent of the current pan/zoom — as a standalone file.
 
 ## Roadmap
 
@@ -53,5 +53,5 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 1. **Foundation** — JSON parser, tree layout, static SVG rendering. ✅
 2. **Interactivity** — pan/zoom, collapse/expand nodes, selection. ✅
 3. **Multi-format** — YAML, XML, CSV, TOML + synced editor. ✅
-4. **Conversion & export** — format conversion ✅, SVG export ✅, PNG export (not yet implemented).
+4. **Conversion & export** — format conversion, SVG export, PNG export. ✅
 5. **Stretch** — themes, search, syntax-highlighting editor.

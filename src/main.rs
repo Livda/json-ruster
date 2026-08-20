@@ -12,6 +12,82 @@ use std::collections::{HashMap, HashSet};
 use wasm_bindgen::closure::Closure;
 use wasm_bindgen::JsCast;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Theme {
+    page_bg: &'static str,
+    toolbar_bg: &'static str,
+    toolbar_border: &'static str,
+    toolbar_text: &'static str,
+    graph_bg: &'static str,
+    node_bg: &'static str,
+    node_border: &'static str,
+    node_border_selected: &'static str,
+    node_border_match: &'static str,
+    edge_color: &'static str,
+    title_color: &'static str,
+    text_color: &'static str,
+    error_color: &'static str,
+}
+
+impl Theme {
+    fn dark() -> Self {
+        Theme {
+            page_bg: "#0f1117",
+            toolbar_bg: "#1a202c",
+            toolbar_border: "#2d3748",
+            toolbar_text: "#a0aec0",
+            graph_bg: "#0f1117",
+            node_bg: "#1a202c",
+            node_border: "#4a5568",
+            node_border_selected: "#f6ad55",
+            node_border_match: "#ecc94b",
+            edge_color: "#4a5568",
+            title_color: "#63b3ed",
+            text_color: "#e2e8f0",
+            error_color: "#ff6b6b",
+        }
+    }
+
+    fn light() -> Self {
+        Theme {
+            page_bg: "#ffffff",
+            toolbar_bg: "#f1f5f9",
+            toolbar_border: "#cbd5e0",
+            toolbar_text: "#4a5568",
+            graph_bg: "#f8fafc",
+            node_bg: "#ffffff",
+            node_border: "#94a3b8",
+            node_border_selected: "#dd6b20",
+            node_border_match: "#b7791f",
+            edge_color: "#94a3b8",
+            title_color: "#2b6cb0",
+            text_color: "#1a202c",
+            error_color: "#c53030",
+        }
+    }
+}
+
+/// Nodes whose title or a field's key/value contains `query`
+/// (case-insensitive). Searched across the whole graph regardless of
+/// collapse state, since a match hidden under a collapsed ancestor should
+/// still surface (and that ancestor gets auto-expanded, see `GraphView`).
+fn find_matches(graph: &Graph, query: &str) -> HashSet<usize> {
+    if query.is_empty() {
+        return HashSet::new();
+    }
+    graph
+        .nodes
+        .iter()
+        .filter(|n| {
+            n.title.to_lowercase().contains(query)
+                || n.fields
+                    .iter()
+                    .any(|(k, v)| k.to_lowercase().contains(query) || v.to_lowercase().contains(query))
+        })
+        .map(|n| n.id)
+        .collect()
+}
+
 /// Clicks a throwaway `<a download>` link -- there is no direct "save file"
 /// API available to a plain WASM/CSR app.
 fn trigger_download(filename: &str, url: &str) {
@@ -96,14 +172,16 @@ fn render_static_svg(
     graph: &Graph,
     positions: &HashMap<usize, NodeLayout>,
     expanded: &HashSet<(usize, FieldRef)>,
+    theme: Theme,
 ) -> (String, f64, f64) {
     let width = positions.values().map(|p| p.x + p.width).fold(0.0_f64, f64::max) + 40.0;
     let height = positions.values().map(|p| p.y + p.height).fold(0.0_f64, f64::max) + 40.0;
 
     let mut svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{width}\" height=\"{height}\" viewBox=\"0 0 {width} {height}\">\n\
-         <rect width=\"{width}\" height=\"{height}\" fill=\"#0f1117\" />\n\
-         <g transform=\"translate(20, 20)\">\n"
+         <rect width=\"{width}\" height=\"{height}\" fill=\"{}\" />\n\
+         <g transform=\"translate(20, 20)\">\n",
+        theme.graph_bg
     );
 
     for (&id, from) in positions {
@@ -115,7 +193,8 @@ fn render_static_svg(
                 let y2 = to.y;
                 let mid_y = (y1 + y2) / 2.0;
                 svg.push_str(&format!(
-                    "<path d=\"M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}\" fill=\"none\" stroke=\"#4a5568\" stroke-width=\"1.5\" />\n"
+                    "<path d=\"M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"1.5\" />\n",
+                    theme.edge_color
                 ));
             }
         }
@@ -127,8 +206,8 @@ fn render_static_svg(
         let node = &graph.nodes[id];
         let pos = positions[&id];
         svg.push_str(&format!(
-            "<g transform=\"translate({}, {})\">\n<rect width=\"{}\" height=\"{}\" rx=\"6\" fill=\"#1a202c\" stroke=\"#4a5568\" stroke-width=\"1.5\" />\n",
-            pos.x, pos.y, pos.width, pos.height
+            "<g transform=\"translate({}, {})\">\n<rect width=\"{}\" height=\"{}\" rx=\"6\" fill=\"{}\" stroke=\"{}\" stroke-width=\"1.5\" />\n",
+            pos.x, pos.y, pos.width, pos.height, theme.node_bg, theme.node_border
         ));
 
         let title_lines = if expanded.contains(&(id, FieldRef::Title)) {
@@ -139,7 +218,8 @@ fn render_static_svg(
         for (i, line) in title_lines.iter().enumerate() {
             let y = 16.0 + i as f64 * LINE_HEIGHT;
             svg.push_str(&format!(
-                "<text x=\"10\" y=\"{y}\" fill=\"#63b3ed\" font-size=\"12\" font-family=\"monospace\" font-weight=\"bold\">{}</text>\n",
+                "<text x=\"10\" y=\"{y}\" fill=\"{}\" font-size=\"12\" font-family=\"monospace\" font-weight=\"bold\">{}</text>\n",
+                theme.title_color,
                 escape_xml_text(line)
             ));
         }
@@ -154,7 +234,8 @@ fn render_static_svg(
             };
             for line in &lines {
                 svg.push_str(&format!(
-                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"#e2e8f0\" font-size=\"12\" font-family=\"monospace\">{}</text>\n",
+                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"{}\" font-size=\"12\" font-family=\"monospace\">{}</text>\n",
+                    theme.text_color,
                     escape_xml_text(line)
                 ));
                 y_cursor += LINE_HEIGHT;
@@ -174,6 +255,10 @@ fn App() -> impl IntoView {
     let (input, set_input) = signal(Format::Json.sample().to_string());
     let (convert_target, set_convert_target) = signal(Format::Yaml);
     let (convert_error, set_convert_error) = signal(None::<String>);
+    let (is_dark, set_is_dark) = signal(true);
+    let (search, set_search) = signal(String::new());
+
+    let theme = move || if is_dark.get() { Theme::dark() } else { Theme::light() };
 
     let parsed = Memo::new(move |_| parsers::parse(format.get(), &input.get()));
 
@@ -207,9 +292,15 @@ fn App() -> impl IntoView {
     };
 
     view! {
-        <div style="display:flex; flex-direction:column; height:100vh; width:100vw; font-family: sans-serif;">
-            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:6px 10px; background:#1a202c; border-bottom:1px solid #2d3748;">
-                <label style="color:#a0aec0; font-size:13px;">"Format"</label>
+        <div style=move || format!(
+            "display:flex; flex-direction:column; height:100vh; width:100vw; font-family: sans-serif; background:{};",
+            theme().page_bg
+        )>
+            <div style=move || format!(
+                "display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:6px 10px; background:{}; border-bottom:1px solid {};",
+                theme().toolbar_bg, theme().toolbar_border
+            )>
+                <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Format"</label>
                 <select on:change=on_format_change>
                     {Format::ALL
                         .iter()
@@ -217,9 +308,9 @@ fn App() -> impl IntoView {
                         .collect::<Vec<_>>()}
                 </select>
 
-                <span style="color:#4a5568; margin:0 4px;">"|"</span>
+                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
 
-                <label style="color:#a0aec0; font-size:13px;">"Convert to"</label>
+                <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Convert to"</label>
                 <select on:change=on_convert_target_change>
                     {Format::ALL
                         .iter()
@@ -228,8 +319,27 @@ fn App() -> impl IntoView {
                 </select>
                 <button on:click=on_convert_click>"Convert"</button>
 
-                {move || convert_error.get().map(|e| view! {
-                    <span style="color:#ff6b6b; font-size:12px;">{e}</span>
+                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
+
+                <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Search"</label>
+                <input
+                    type="text"
+                    placeholder="key or value..."
+                    prop:value=move || search.get()
+                    on:input=move |ev| set_search.set(event_target_value(&ev))
+                />
+
+                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
+
+                <button on:click=move |_| set_is_dark.update(|d| *d = !*d)>
+                    {move || if is_dark.get() { "Light theme" } else { "Dark theme" }}
+                </button>
+
+                {move || convert_error.get().map(|e| {
+                    let color = theme().error_color;
+                    view! {
+                        <span style=format!("color:{color}; font-size:12px;")>{e}</span>
+                    }
                 })}
             </div>
             <div style="display:flex; flex:1; min-height:0;">
@@ -241,12 +351,15 @@ fn App() -> impl IntoView {
                         set_convert_error.set(None);
                     }
                 />
-                <div style="width:60%; height:100%; overflow:hidden; background:#0f1117;">
+                <div style=move || format!("width:60%; height:100%; overflow:hidden; background:{};", theme().graph_bg)>
                     {move || match parsed.get() {
-                        Ok(data) => view! { <GraphView data=data /> }.into_any(),
-                        Err(e) => view! {
-                            <p style="color:#ff6b6b; padding:1em; font-family: monospace; white-space:pre-wrap;">{e}</p>
-                        }.into_any(),
+                        Ok(data) => view! { <GraphView data=data theme=theme() search=search /> }.into_any(),
+                        Err(e) => {
+                            let color = theme().error_color;
+                            view! {
+                                <p style=format!("color:{color}; padding:1em; font-family: monospace; white-space:pre-wrap;")>{e}</p>
+                            }.into_any()
+                        },
                     }}
                 </div>
             </div>
@@ -255,12 +368,34 @@ fn App() -> impl IntoView {
 }
 
 #[component]
-fn GraphView(data: DataNode) -> impl IntoView {
+fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl IntoView {
     let graph = StoredValue::new(build_graph(&data));
 
     let (collapsed, set_collapsed) = signal(HashSet::<usize>::new());
     let (selected, set_selected) = signal(None::<usize>);
     let (expanded, set_expanded) = signal(HashSet::<(usize, FieldRef)>::new());
+
+    // A search match hidden under a collapsed ancestor would otherwise stay
+    // invisible, defeating the point of searching. Expand every ancestor of
+    // a match whenever the query (or matches) change.
+    Effect::new(move |_| {
+        let query = search.get().to_lowercase();
+        let matches = graph.with_value(|g| find_matches(g, &query));
+        if matches.is_empty() {
+            return;
+        }
+        set_collapsed.update(|set| {
+            graph.with_value(|g| {
+                for &id in &matches {
+                    let mut current = g.nodes[id].parent;
+                    while let Some(pid) = current {
+                        set.remove(&pid);
+                        current = g.nodes[pid].parent;
+                    }
+                }
+            });
+        });
+    });
 
     let (scale, set_scale) = signal(1.0_f64);
     let (tx, set_tx) = signal(0.0_f64);
@@ -343,7 +478,7 @@ fn GraphView(data: DataNode) -> impl IntoView {
         let expanded_set = expanded.get_untracked();
         graph.with_value(|g| {
             let positions = compute_layout(g, &collapsed_set, &expanded_set);
-            render_static_svg(g, &positions, &expanded_set)
+            render_static_svg(g, &positions, &expanded_set, theme)
         })
     };
     let on_export_svg = move |_: MouseEvent| {
@@ -364,9 +499,17 @@ fn GraphView(data: DataNode) -> impl IntoView {
             on:pointerdown=on_pointer_down
             on:wheel=on_wheel
         >
-            <div style="position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:6px 10px; font-family:monospace; font-size:12px; color:#a0aec0; background:rgba(15,17,23,0.85); z-index:1;">
+            <div style=move || format!(
+                "position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:6px 10px; font-family:monospace; font-size:12px; color:{}; background:{}cc; z-index:1;",
+                theme.toolbar_text, theme.toolbar_bg
+            )>
                 <span style="pointer-events:none;">
                     {move || {
+                        let query = search.get().to_lowercase();
+                        if !query.is_empty() {
+                            let count = graph.with_value(|g| find_matches(g, &query).len());
+                            return format!("{count} match(es)");
+                        }
                         selected.get()
                             .map(|id| graph.with_value(|g| g.path_to(id)))
                             .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
@@ -383,15 +526,19 @@ fn GraphView(data: DataNode) -> impl IntoView {
                         let collapsed_set = collapsed.get();
                         let expanded_set = expanded.get();
                         let sel = selected.get();
+                        let query = search.get().to_lowercase();
                         graph.with_value(|g| {
                             let positions = compute_layout(g, &collapsed_set, &expanded_set);
-                            let edges = render_edges(g, &positions);
+                            let matches = find_matches(g, &query);
+                            let edges = render_edges(g, &positions, theme);
                             let nodes = render_nodes(
                                 g,
                                 &positions,
                                 &collapsed_set,
                                 &expanded_set,
                                 sel,
+                                &matches,
+                                theme,
                                 toggle,
                                 select,
                                 toggle_expand,
@@ -410,7 +557,7 @@ fn GraphView(data: DataNode) -> impl IntoView {
     }
 }
 
-fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>) -> Vec<impl IntoView> {
+fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>, theme: Theme) -> Vec<impl IntoView> {
     positions
         .keys()
         .flat_map(|&id| {
@@ -423,7 +570,7 @@ fn render_edges(graph: &Graph, positions: &HashMap<usize, NodeLayout>) -> Vec<im
                     let y2 = to.y;
                     let mid_y = (y1 + y2) / 2.0;
                     let d = format!("M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}");
-                    view! { <path d=d fill="none" stroke="#4a5568" stroke-width="1.5" /> }
+                    view! { <path d=d fill="none" stroke=theme.edge_color stroke-width="1.5" /> }
                 })
             })
         })
@@ -439,6 +586,7 @@ fn truncatable_lines(
     x: &'static str,
     start_y: f64,
     color: &'static str,
+    marker_color: &'static str,
     weight: Option<&'static str>,
     full: String,
     key: (usize, FieldRef),
@@ -459,7 +607,7 @@ fn truncatable_lines(
                         {line}
                         {is_last.then(|| view! {
                             <tspan
-                                fill="#63b3ed"
+                                fill=marker_color
                                 style="cursor:pointer;"
                                 on:click=move |ev: MouseEvent| {
                                     ev.stop_propagation();
@@ -482,7 +630,7 @@ fn truncatable_lines(
                 {display}
                 {truncated.then(|| view! {
                     <tspan
-                        fill="#63b3ed"
+                        fill=marker_color
                         style="cursor:pointer;"
                         on:click=move |ev: MouseEvent| {
                             ev.stop_propagation();
@@ -505,6 +653,8 @@ fn render_nodes(
     collapsed: &HashSet<usize>,
     expanded: &HashSet<(usize, FieldRef)>,
     selected: Option<usize>,
+    matches: &HashSet<usize>,
+    theme: Theme,
     toggle: impl Fn(usize) + Copy + 'static,
     select: impl Fn(usize) + Copy + 'static,
     toggle_expand: impl Fn((usize, FieldRef)) + Copy + 'static,
@@ -519,6 +669,7 @@ fn render_nodes(
             let has_children = !node.children.is_empty();
             let is_collapsed = collapsed.contains(&id);
             let is_selected = selected == Some(id);
+            let is_match = matches.contains(&id);
 
             let marker = if !has_children {
                 String::new()
@@ -531,7 +682,8 @@ fn render_nodes(
             let (title_views, title_line_count) = truncatable_lines(
                 "10",
                 16.0,
-                "#63b3ed",
+                theme.title_color,
+                theme.title_color,
                 Some("bold"),
                 node.title.clone(),
                 (id, FieldRef::Title),
@@ -546,7 +698,8 @@ fn render_nodes(
                 let (views, count) = truncatable_lines(
                     "10",
                     y_cursor,
-                    "#e2e8f0",
+                    theme.text_color,
+                    theme.title_color,
                     None,
                     full,
                     (id, FieldRef::Field(i)),
@@ -557,7 +710,14 @@ fn render_nodes(
                 y_cursor += count as f64 * LINE_HEIGHT;
             }
 
-            let stroke = if is_selected { "#f6ad55" } else { "#4a5568" };
+            let stroke = if is_selected {
+                theme.node_border_selected
+            } else if is_match {
+                theme.node_border_match
+            } else {
+                theme.node_border
+            };
+            let stroke_width = if is_selected || is_match { "2.5" } else { "1.5" };
             let cursor = if has_children { "pointer" } else { "default" };
             let marker_x = pos.width - (marker.len() as f64 * 7.0) - 10.0;
 
@@ -577,13 +737,13 @@ fn render_nodes(
                         width=pos.width
                         height=pos.height
                         rx="6"
-                        fill="#1a202c"
+                        fill=theme.node_bg
                         stroke=stroke
-                        stroke-width="1.5"
+                        stroke-width=stroke_width
                     />
                     {title_views}
                     {(!marker.is_empty()).then(|| view! {
-                        <text x=marker_x y="16" fill="#a0aec0" font-size="11" font-family="monospace">{marker}</text>
+                        <text x=marker_x y="16" fill=theme.toolbar_text font-size="11" font-family="monospace">{marker}</text>
                     })}
                     {field_views}
                 </g>

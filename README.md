@@ -35,7 +35,7 @@ cargo test --lib
 - `src/graph.rs` — builds a tree of displayable nodes (`GraphNode`) from a `DataNode`, tracking parents and computing paths (`path_to`).
 - `src/layout.rs` — node positioning (simplified Reingold–Tilford-style algorithm), accounting for collapsed nodes and inline-expanded lines.
 - `src/convert.rs` — serializes a `DataNode` back to any supported format's text (JSON/YAML/XML/CSV/TOML), inferring numbers/booleans/null from scalar text.
-- `src/main.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection, conversion, SVG/PNG export).
+- `src/main.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection, conversion, SVG/PNG export, search, theme).
 
 ## Interactions
 
@@ -45,6 +45,8 @@ cargo test --lib
 - **Long values**: click the `[...]` marker to expand a truncated line in place (`[-]` to collapse it back).
 - **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format.
 - **Export**: "Export SVG"/"Export PNG" (top-right of the graph panel) download the full graph — independent of the current pan/zoom — as a standalone file.
+- **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable.
+- **Theme**: "Light theme"/"Dark theme" toggles the whole UI, including exported SVG/PNG files.
 
 ## Roadmap
 
@@ -54,4 +56,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 2. **Interactivity** — pan/zoom, collapse/expand nodes, selection. ✅
 3. **Multi-format** — YAML, XML, CSV, TOML + synced editor. ✅
 4. **Conversion & export** — format conversion, SVG export, PNG export. ✅
-5. **Stretch** — themes, search, syntax-highlighting editor.
+5. **Stretch** — light/dark theme ✅, search ✅, syntax-highlighting editor (not planned: would need a JS dependency like CodeMirror, out of scope for a pure-Rust/WASM app).

@@ -163,15 +163,24 @@ fn GraphView(data: DataNode) -> impl IntoView {
         ));
     };
 
-    window_event_listener(leptos::ev::pointermove, move |ev: PointerEvent| {
+    // window_event_listener does not auto-cleanup: without on_cleanup, this
+    // closure keeps running against this GraphView's signals after it has
+    // been unmounted (e.g. a new GraphView is mounted after a format
+    // change), which panics on a disposed signal the next time the mouse
+    // moves anywhere on the page.
+    let pointermove_handle = window_event_listener(leptos::ev::pointermove, move |ev: PointerEvent| {
         if is_dragging.get_untracked() {
             let (sx, sy, start_tx, start_ty) = drag_start.get_value();
             set_tx.set(start_tx + (ev.client_x() as f64 - sx));
             set_ty.set(start_ty + (ev.client_y() as f64 - sy));
         }
     });
-    window_event_listener(leptos::ev::pointerup, move |_: PointerEvent| {
+    let pointerup_handle = window_event_listener(leptos::ev::pointerup, move |_: PointerEvent| {
         set_is_dragging.set(false);
+    });
+    on_cleanup(move || {
+        pointermove_handle.remove();
+        pointerup_handle.remove();
     });
 
     let on_wheel = move |ev: WheelEvent| {

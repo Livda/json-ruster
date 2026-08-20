@@ -9,17 +9,46 @@ pub struct NodeLayout {
     pub height: f64,
 }
 
-const LEVEL_HEIGHT: f64 = 140.0;
+const VERTICAL_SPACING: f64 = 40.0;
 const SIBLING_SPACING: f64 = 40.0;
 const LINE_HEIGHT: f64 = 20.0;
 const CHAR_WIDTH: f64 = 8.0;
 const BOX_PADDING: f64 = 12.0;
 const MIN_WIDTH: f64 = 100.0;
 
+/// Max characters shown for a title or "key: value" line before it is
+/// truncated with an ellipsis. Keeps box width bounded regardless of how
+/// long the underlying data is; the full text stays available as a native
+/// tooltip in the renderer.
+pub const MAX_FIELD_CHARS: usize = 48;
+
+pub fn truncate_display(s: &str) -> String {
+    if s.chars().count() <= MAX_FIELD_CHARS {
+        s.to_string()
+    } else {
+        let head: String = s.chars().take(MAX_FIELD_CHARS.saturating_sub(1)).collect();
+        format!("{head}\u{2026}")
+    }
+}
+
+pub fn field_text(key: &str, value: &str) -> String {
+    let full = if key.is_empty() {
+        value.to_string()
+    } else {
+        format!("{key}: {value}")
+    };
+    truncate_display(&full)
+}
+
 /// Simplified Reingold-Tilford style tree layout: leaves are placed left to
 /// right via a single running offset, and each internal node is centered
 /// over its children. Sharing one running offset across the whole
 /// post-order traversal guarantees sibling subtrees never overlap.
+///
+/// Rows are placed at a dynamic y-offset based on the tallest node seen at
+/// each depth so far, rather than a fixed row height: a node with many
+/// fields can be taller than a single row, and a fixed height would let the
+/// next row overlap it.
 ///
 /// Nodes whose id is in `collapsed` are laid out as leaves: their children
 /// are skipped entirely, so the returned map only contains currently
@@ -35,9 +64,47 @@ pub fn layout(graph: &Graph, collapsed: &HashSet<usize>) -> HashMap<usize, NodeL
     let mut next_x = 0.0f64;
     assign_x(graph, graph.root, collapsed, &sizes, &mut next_x, &mut x_by_id);
 
-    let mut result = HashMap::new();
-    assign_y(graph, graph.root, collapsed, 0, &sizes, &x_by_id, &mut result);
-    result
+    let mut depth_by_id: HashMap<usize, usize> = HashMap::new();
+    collect_depths(graph, graph.root, collapsed, 0, &mut depth_by_id);
+
+    let max_depth = depth_by_id.values().copied().max().unwrap_or(0);
+    let mut row_height = vec![0.0_f64; max_depth + 1];
+    for (&id, &depth) in &depth_by_id {
+        row_height[depth] = row_height[depth].max(sizes[&id].1);
+    }
+    let mut row_y = vec![0.0_f64; max_depth + 1];
+    for depth in 1..=max_depth {
+        row_y[depth] = row_y[depth - 1] + row_height[depth - 1] + VERTICAL_SPACING;
+    }
+
+    depth_by_id
+        .into_iter()
+        .map(|(id, depth)| {
+            let (width, height) = sizes[&id];
+            (
+                id,
+                NodeLayout {
+                    x: x_by_id[&id],
+                    y: row_y[depth],
+                    width,
+                    height,
+                },
+            )
+        })
+        .collect()
+}
+
+fn collect_depths(
+    graph: &Graph,
+    id: usize,
+    collapsed: &HashSet<usize>,
+    depth: usize,
+    out: &mut HashMap<usize, usize>,
+) {
+    out.insert(id, depth);
+    for &child in children_of(graph, collapsed, id) {
+        collect_depths(graph, child, collapsed, depth + 1, out);
+    }
 }
 
 fn children_of<'a>(graph: &'a Graph, collapsed: &HashSet<usize>, id: usize) -> &'a [usize] {
@@ -55,8 +122,8 @@ fn node_size(node: &GraphNode) -> (f64, f64) {
     let max_chars = node
         .fields
         .iter()
-        .map(|(k, v)| if k.is_empty() { v.len() } else { k.len() + v.len() + 2 })
-        .chain(std::iter::once(node.title.len()))
+        .map(|(k, v)| field_text(k, v).chars().count())
+        .chain(std::iter::once(truncate_display(&node.title).chars().count()))
         .max()
         .unwrap_or(4);
 
@@ -90,35 +157,29 @@ fn assign_x(
     }
 }
 
-fn assign_y(
-    graph: &Graph,
-    id: usize,
-    collapsed: &HashSet<usize>,
-    depth: usize,
-    sizes: &HashMap<usize, (f64, f64)>,
-    x_by_id: &HashMap<usize, f64>,
-    result: &mut HashMap<usize, NodeLayout>,
-) {
-    let (width, height) = sizes[&id];
-    result.insert(
-        id,
-        NodeLayout {
-            x: x_by_id[&id],
-            y: depth as f64 * LEVEL_HEIGHT,
-            width,
-            height,
-        },
-    );
-    for &child in children_of(graph, collapsed, id) {
-        assign_y(graph, child, collapsed, depth + 1, sizes, x_by_id, result);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::graph::build_graph;
     use crate::model::DataNode;
+
+    #[test]
+    fn field_text_truncates_long_values() {
+        let long_value = "a".repeat(200);
+        let text = field_text("about", &long_value);
+        assert!(text.chars().count() <= MAX_FIELD_CHARS);
+        assert!(text.ends_with('\u{2026}'));
+    }
+
+    #[test]
+    fn node_width_is_bounded_for_long_field_values() {
+        let data = DataNode::Object(vec![("about".into(), DataNode::Scalar("a".repeat(2000)))]);
+        let graph = build_graph(&data);
+        let positions = layout(&graph, &HashSet::new());
+        let width = positions[&graph.root].width;
+        let max_expected = MAX_FIELD_CHARS as f64 * CHAR_WIDTH + BOX_PADDING * 2.0;
+        assert!(width <= max_expected, "width {width} exceeded {max_expected}");
+    }
 
     #[test]
     fn siblings_do_not_overlap() {
@@ -143,16 +204,32 @@ mod tests {
     }
 
     #[test]
-    fn children_are_one_level_below_parent() {
-        let data = DataNode::Object(vec![(
-            "author".into(),
-            DataNode::Object(vec![("name".into(), DataNode::Scalar("A".into()))]),
-        )]);
+    fn rows_never_overlap_vertically() {
+        // The root has many fields (tall box); its child row must start
+        // below the root's bottom edge, not at some fixed row height.
+        let data = DataNode::Object(vec![
+            ("a".into(), DataNode::Scalar("1".into())),
+            ("b".into(), DataNode::Scalar("2".into())),
+            ("c".into(), DataNode::Scalar("3".into())),
+            ("d".into(), DataNode::Scalar("4".into())),
+            ("e".into(), DataNode::Scalar("5".into())),
+            (
+                "child".into(),
+                DataNode::Object(vec![("x".into(), DataNode::Scalar("1".into()))]),
+            ),
+        ]);
         let graph = build_graph(&data);
         let positions = layout(&graph, &HashSet::new());
+
+        let root = positions[&graph.root];
         let child_id = graph.nodes[graph.root].children[0];
-        assert_eq!(positions[&child_id].y, LEVEL_HEIGHT);
-        assert_eq!(positions[&graph.root].y, 0.0);
+        let child = positions[&child_id];
+
+        assert_eq!(root.y, 0.0);
+        assert!(
+            child.y >= root.y + root.height,
+            "expected child row {child:?} to start below the root {root:?}"
+        );
     }
 
     #[test]

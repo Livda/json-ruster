@@ -4,6 +4,10 @@ Format basé sur [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0
 
 ## [Unreleased]
 
+### Corrigé
+- Chevauchement vertical des boîtes quand un nœud a plus de champs que la hauteur de ligne fixe ne le permettait : la hauteur de chaque rangée est maintenant calculée dynamiquement (hauteur du plus grand nœud de la rangée précédente), au lieu d'une constante `LEVEL_HEIGHT`.
+- Débordement du texte hors des boîtes pour les valeurs très longues (ex. paragraphes de texte) : les lignes "clé: valeur" et le titre sont tronqués à 48 caractères (`layout::truncate_display` / `field_text`), avec le texte complet toujours consultable via l'infobulle native (`<title>` SVG) au survol.
+
 ## [0.3.0] - Jalon 3 — Multi-formats
 
 ### Ajouté

@@ -1,5 +1,7 @@
 use json_ruster::graph::{build_graph, Graph};
-use json_ruster::layout::{layout as compute_layout, NodeLayout};
+use json_ruster::layout::{
+    field_text, layout as compute_layout, truncate_display, NodeLayout,
+};
 use json_ruster::model::DataNode;
 use json_ruster::parsers::{self, Format};
 use leptos::ev::{MouseEvent, PointerEvent, WheelEvent};
@@ -173,7 +175,8 @@ fn render_nodes(
         .map(|id| {
             let node = &graph.nodes[id];
             let pos = positions[&id];
-            let title = node.title.clone();
+            let title_full = node.title.clone();
+            let title_display = truncate_display(&node.title);
             let has_children = !node.children.is_empty();
             let is_collapsed = collapsed.contains(&id);
             let is_selected = selected == Some(id);
@@ -191,15 +194,17 @@ fn render_nodes(
                 .iter()
                 .enumerate()
                 .map(|(i, (k, v))| {
-                    let text = if k.is_empty() {
+                    let full = if k.is_empty() {
                         v.clone()
                     } else {
                         format!("{k}: {v}")
                     };
+                    let display = field_text(k, v);
                     let y = 30.0 + i as f64 * 20.0;
                     view! {
                         <text x="10" y=y fill="#e2e8f0" font-size="12" font-family="monospace">
-                            {text}
+                            <title>{full}</title>
+                            {display}
                         </text>
                     }
                 })
@@ -230,7 +235,8 @@ fn render_nodes(
                         stroke-width="1.5"
                     />
                     <text x="10" y="16" fill="#63b3ed" font-size="12" font-family="monospace" font-weight="bold">
-                        {title}
+                        <title>{title_full}</title>
+                        {title_display}
                     </text>
                     {(!marker.is_empty()).then(|| view! {
                         <text x=marker_x y="16" fill="#a0aec0" font-size="11" font-family="monospace">{marker}</text>

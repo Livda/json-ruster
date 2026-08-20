@@ -4,17 +4,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
-## [0.7.0] - Milestone 7 — GitLab CI
+## [0.7.0] - Milestone 7 — GitHub Actions CI
 
 ### Added
-- `.gitlab-ci.yml` with four stages: `lint` (`cargo fmt --check`, `cargo clippy -- -D warnings`), `test` (`cargo test --lib`), `build` (`trunk build --release`, published as an artifact), `docker` (build and push the production image to `$CI_REGISTRY_IMAGE`, tagged with the commit SHA and `latest` on the default branch).
-- Cargo/target cache keyed on `Cargo.lock` shared across the lint/test/build jobs.
+- `.github/workflows/ci.yml` with jobs `fmt`/`clippy` (lint), `test` (`cargo test --lib`), `build-wasm` (`trunk build --release`, uploaded as an artifact), and `docker` (build and push the production image to GHCR at `ghcr.io/<repo>`, tagged with the commit SHA and `latest`, on pushes to `main`).
+- Cargo build cache via `Swatinem/rust-cache` shared across the clippy/test/build-wasm jobs.
 
 ### Fixed
-- Applied `cargo fmt` across the codebase and fixed the two `clippy::too_many_arguments` lints on `truncatable_lines`/`render_nodes` (via a targeted `#[allow]`, not worth a bigger refactor right now) so the new lint/test CI stages start clean instead of red on day one.
+- Applied `cargo fmt` across the codebase and fixed the two `clippy::too_many_arguments` lints on `truncatable_lines`/`render_nodes` (via a targeted `#[allow]`, not worth a bigger refactor right now) so the new lint/test CI jobs start clean instead of red on day one.
 
 ### Notes
-- The `docker` stage's push step could not be exercised here (no GitLab runner in this environment); `docker build`, `cargo fmt --check`, `cargo clippy -- -D warnings` and `cargo test --lib` were all run and verified locally, and the pipeline's `docker login`/push relies on GitLab's predefined `CI_REGISTRY*` variables, which are only present when running under GitLab CI with the project's Container Registry enabled.
+- A GitLab CI pipeline was set up first and then replaced with this GitHub Actions one at the user's request.
+- The `docker` job's push step could not be exercised here (no GitHub Actions runner in this environment); `docker build`, `cargo fmt --check`, `cargo clippy -- -D warnings` and `cargo test --lib` were all run and verified locally. The push relies on the repo's built-in `GITHUB_TOKEN` and the GitHub Container Registry, both available by default with no extra secrets to configure.
 ## [0.6.0] - Milestone 6 — Docker
 
 ### Added

@@ -59,7 +59,7 @@ docker compose --profile test run --rm test
 
 ## CI
 
-`.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` plus `cargo-llvm-cov` (test + coverage, `lcov.info` uploaded as an artifact), `trunk build --release` (build, uploaded as an artifact), then a `docker build` to validate the `Dockerfile` still builds (not pushed anywhere). The browser-driven `tests/ui.rs` suite isn't wired into CI yet (it only runs locally via the `chromedriver`/`test` services) -- it would need chromedriver + chromium on the runner.
+`.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` plus `cargo-llvm-cov` (test + coverage -- a per-file table is written to the run's Summary tab, and `lcov.info` is uploaded as an artifact), `trunk build --release` (build, uploaded as an artifact), then a `docker build` to validate the `Dockerfile` still builds (not pushed anywhere). The browser-driven `tests/ui.rs` suite isn't wired into CI yet (it only runs locally via the `chromedriver`/`test` services) -- it would need chromedriver + chromium on the runner.
 
 ## Architecture
 

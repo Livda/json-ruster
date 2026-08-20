@@ -4,6 +4,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.2] - Surface coverage on GitHub
+
+### Added
+- CI's `test` job writes the `cargo-llvm-cov` per-file summary table to the workflow run's Summary tab (`$GITHUB_STEP_SUMMARY`), so coverage is visible directly in GitHub's UI without downloading the `lcov.info` artifact.
+
+### Notes
+- Kept GitHub-native on purpose (no Codecov/Coveralls account, no extra permissions): the user picked the Summary-tab option over a PR-comment bot, which would need `pull-requests: write`.
+
 ## [0.11.1] - Share link: compression + size limit
 
 ### Changed

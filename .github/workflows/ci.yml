@@ -39,7 +39,14 @@ jobs:
       - uses: taiki-e/install-action@v2.86.4
         with:
           tool: cargo-llvm-cov
-      - run: cargo llvm-cov --lib --summary-only
+      - name: Coverage summary
+        run: |
+          {
+            echo "## Coverage (cargo test --lib)"
+            echo '```'
+            cargo llvm-cov --lib --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - run: cargo llvm-cov --lib --lcov --output-path lcov.info
       - uses: actions/upload-artifact@v7
         with:

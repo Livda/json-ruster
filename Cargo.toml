@@ -2,6 +2,9 @@
 name = "json-ruster"
 version = "0.1.0"
 edition = "2021"
+description = "Interactive JSON/YAML/XML/CSV/TOML tree viewer -- a Rust/WASM take on JSON Crack, no backend."
+license = "Apache-2.0"
+repository = "https://github.com/Livda/json-ruster"
 
 [dependencies]
 leptos = { version = "0.7", features = ["csr"] }

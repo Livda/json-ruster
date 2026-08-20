@@ -184,7 +184,11 @@ fn write_xml_element(out: &mut String, tag: &str, node: &DataNode, indent: usize
             for (k, v) in fields {
                 if let Some(name) = k.strip_prefix('@') {
                     if let DataNode::Scalar(s) = v {
-                        attrs.push_str(&format!(" {name}=\"{}\"", escape_xml(s)));
+                        attrs.push_str(&format!(
+                            " {}=\"{}\"",
+                            sanitize_xml_name(name),
+                            escape_xml(s)
+                        ));
                     }
                 } else if k == "#text" {
                     if let DataNode::Scalar(s) = v {
@@ -204,7 +208,7 @@ fn write_xml_element(out: &mut String, tag: &str, node: &DataNode, indent: usize
             } else {
                 out.push_str(&format!("{pad}<{tag}{attrs}>\n"));
                 for (k, v) in children {
-                    write_xml_element(out, k, v, indent + 1);
+                    write_xml_element(out, &sanitize_xml_name(k), v, indent + 1);
                 }
                 out.push_str(&format!("{pad}</{tag}>\n"));
             }
@@ -224,6 +228,26 @@ fn escape_xml(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+/// A `DataNode` key becomes an XML tag or attribute name, but arbitrary
+/// JSON/YAML/CSV/TOML keys (spaces, quotes, leading digits, ...) aren't
+/// valid XML names. Replace invalid characters instead of emitting
+/// malformed XML.
+fn sanitize_xml_name(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for (i, c) in s.chars().enumerate() {
+        let valid = if i == 0 {
+            c.is_alphabetic() || c == '_'
+        } else {
+            c.is_alphanumeric() || matches!(c, '_' | '-' | '.')
+        };
+        out.push(if valid { c } else { '_' });
+    }
+    if out.is_empty() {
+        out.push('_');
+    }
+    out
 }
 
 #[cfg(test)]
@@ -292,5 +316,14 @@ mod tests {
         let xml = to_xml(&data).unwrap();
         let reparsed = parsers::xml::parse_xml(&xml).unwrap();
         assert_eq!(data, reparsed);
+    }
+
+    #[test]
+    fn xml_sanitizes_keys_that_are_not_valid_xml_names() {
+        let data = parsers::json::parse_json(r#"{"weird key \"x\"": "1", "2nd": "y"}"#).unwrap();
+        let xml = to_xml(&data).unwrap();
+        // Must still be parseable XML: no raw spaces/quotes left in a tag name.
+        assert!(parsers::xml::parse_xml(&xml).is_ok());
+        assert!(!xml.contains("<weird key"));
     }
 }

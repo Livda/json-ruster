@@ -17,7 +17,68 @@ pub const SAMPLE: &str = r#"<project name="json-ruster" version="0.1.0">
 </project>
 "#;
 
+/// `roxmltree::Document::parse` recurses once per nesting level with no
+/// depth limit of its own, so a sufficiently deep document overflows the
+/// stack and aborts the whole process -- unlike serde_json/serde_yaml/toml,
+/// which all guard against this and return a normal parse error instead.
+/// A cheap tag-counting pre-scan (not full XML parsing, just enough to
+/// bound nesting) rejects pathologically deep input before roxmltree ever
+/// sees it.
+const MAX_XML_DEPTH: usize = 256;
+
+fn check_xml_depth(input: &str) -> Result<(), String> {
+    let mut depth: usize = 0;
+    let mut rest = input;
+    while let Some(lt) = rest.find('<') {
+        rest = &rest[lt..];
+        if rest.starts_with("<!--") {
+            match rest.find("-->") {
+                Some(end) => rest = &rest[end + 3..],
+                None => break,
+            }
+        } else if rest.starts_with("<![CDATA[") {
+            match rest.find("]]>") {
+                Some(end) => rest = &rest[end + 3..],
+                None => break,
+            }
+        } else if rest.starts_with("<?") {
+            match rest.find("?>") {
+                Some(end) => rest = &rest[end + 2..],
+                None => break,
+            }
+        } else if rest.starts_with("<!") {
+            match rest.find('>') {
+                Some(end) => rest = &rest[end + 1..],
+                None => break,
+            }
+        } else if let Some(rest_after_slash) = rest.strip_prefix("</") {
+            depth = depth.saturating_sub(1);
+            match rest_after_slash.find('>') {
+                Some(end) => rest = &rest_after_slash[end + 1..],
+                None => break,
+            }
+        } else {
+            match rest.find('>') {
+                Some(end) => {
+                    if !rest[..end].ends_with('/') {
+                        depth += 1;
+                        if depth > MAX_XML_DEPTH {
+                            return Err(format!(
+                                "XML nesting exceeds the maximum supported depth ({MAX_XML_DEPTH})"
+                            ));
+                        }
+                    }
+                    rest = &rest[end + 1..];
+                }
+                None => break,
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn parse_xml(input: &str) -> Result<DataNode, String> {
+    check_xml_depth(input)?;
     let doc = Document::parse(input).map_err(|e| e.to_string())?;
     Ok(from_element(doc.root_element()))
 }
@@ -108,5 +169,28 @@ mod tests {
     #[test]
     fn reports_parse_errors() {
         assert!(parse_xml("<unclosed>").is_err());
+    }
+
+    #[test]
+    fn rejects_pathologically_deep_nesting_instead_of_crashing() {
+        let depth = MAX_XML_DEPTH + 10;
+        let xml = format!("{}1{}", "<a>".repeat(depth), "</a>".repeat(depth));
+        assert!(parse_xml(&xml).is_err());
+    }
+
+    #[test]
+    fn moderate_nesting_within_the_limit_still_parses() {
+        let depth = 50;
+        let xml = format!("{}1{}", "<a>".repeat(depth), "</a>".repeat(depth));
+        assert!(parse_xml(&xml).is_ok());
+    }
+
+    #[test]
+    fn comments_and_self_closing_tags_do_not_count_towards_depth() {
+        let xml = format!(
+            "<!-- {} --><root><br/><br/>1</root>",
+            "<a>".repeat(MAX_XML_DEPTH + 10)
+        );
+        assert!(parse_xml(&xml).is_ok());
     }
 }

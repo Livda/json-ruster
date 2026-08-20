@@ -4,6 +4,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.8.0] - Project audit follow-up
+
+### Added
+- `LICENSE` (Apache-2.0), plus `license`/`description`/`repository` metadata in `Cargo.toml`.
+- `rust-toolchain.toml` pinning the Rust toolchain to `1.93.1` (with `wasm32-unknown-unknown`, `rustfmt`, `clippy`), so local dev, Docker and CI all build with the same, reproducible compiler instead of a floating `stable`/`1-slim-bookworm`.
+
+### Fixed
+- **Real crash, not just theoretical**: `roxmltree::Document::parse` has no recursion-depth limit and genuinely stack-overflows the whole process on deeply nested XML (confirmed by testing: JSON/YAML/TOML all returned a clean parse error at depth ~50k thanks to their own built-in recursion limits; XML aborted the process). `parsers::xml::parse_xml` now runs a cheap tag-depth pre-scan (`check_xml_depth`, limit 256) before handing the input to roxmltree, rejecting pathologically deep documents with a normal error instead of crashing the tab.
+- `convert::to_xml` used `DataNode` keys directly as XML tag/attribute names without validating them; a key with spaces, quotes or a leading digit produced invalid XML. Added `sanitize_xml_name` to replace invalid characters instead.
+- Docker base images (`rust:1-slim-bookworm`, `nginx:alpine`) and the CI Rust toolchain (`dtolnay/rust-toolchain@stable`) were floating tags; pinned to `rust:1.93.1-slim-bookworm`, `nginx:1.27-alpine` and `dtolnay/rust-toolchain@1.93.1`.
+
+### Notes
+- Audited the project end-to-end for gaps (see conversation); accessibility (keyboard navigation for the graph) was flagged but intentionally left out of this pass.
+
 ## [0.7.0] - Milestone 7 — GitHub Actions CI
 
 ### Added

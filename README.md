@@ -1,5 +1,7 @@
 # json-ruster
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+
 > Interactive JSON/YAML/XML/CSV/TOML tree viewer — a Rust/WASM take on JSON Crack, no backend.
 
 A Rust clone of [JSON Crack](https://github.com/AykutSarac/jsoncrack.com): interactive tree visualization of JSON/YAML/XML/CSV/TOML, no backend, compiled entirely to WebAssembly.
@@ -33,7 +35,7 @@ Or with Docker Compose:
 docker compose up --build
 ```
 
-Then open `http://127.0.0.1:8080`. The image is a multi-stage build: a `rust:slim` stage compiles the app with Trunk (`trunk build --release`), and the runtime stage is `nginx:alpine` serving the static `dist/` output — no Rust toolchain in the final image.
+Then open `http://127.0.0.1:8080`. The image is a multi-stage build: a `rust:1.93.1-slim-bookworm` stage compiles the app with Trunk (`trunk build --release`), and the runtime stage is `nginx:1.27-alpine` serving the static `dist/` output — no Rust toolchain in the final image. Both base images are pinned to a specific version (not `latest`/`alpine`) for reproducible builds, matching the Rust version pinned in `rust-toolchain.toml`.
 
 ## Tests
 
@@ -78,3 +80,7 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 5. **Stretch** — light/dark theme ✅, search ✅, syntax-highlighting editor (not planned: would need a JS dependency like CodeMirror, out of scope for a pure-Rust/WASM app).
 6. **Docker** — multi-stage `Dockerfile` (Trunk build + nginx runtime) for a production image, plus `compose.yaml`. ✅
 7. **CI** — GitHub Actions pipeline: lint (fmt/clippy), test, build (Trunk), validate the Docker image builds. ✅
+
+## License
+
+Apache-2.0, see [LICENSE](./LICENSE).

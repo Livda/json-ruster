@@ -11,6 +11,7 @@ A Rust clone of [JSON Crack](https://github.com/AykutSarac/jsoncrack.com): inter
 - [Leptos](https://leptos.dev/) (CSR) for the reactive UI.
 - [Trunk](https://trunkrs.dev/) for the WASM build/bundling.
 - Graph rendered as native SVG (no canvas, no JS graph library).
+- Release builds run through `wasm-opt -Oz` (`data-wasm-opt="z"` in `index.html`, version pinned in `Trunk.toml`), shrinking the shipped `.wasm` from ~1.1 MB to ~0.7 MB.
 
 ## Running locally
 

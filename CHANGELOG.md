@@ -4,6 +4,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.9.0] - Batch 1/3: Performance
+
+### Added
+- `wasm-opt -Oz` runs on release builds (`data-wasm-opt="z"` on the `<link data-trunk rel="rust">` tag in `index.html`, tool version pinned via `Trunk.toml`). Measured: shipped `.wasm` shrinks from ~1.1 MB (release, no wasm-opt) to ~0.7 MB.
+
 ## [0.8.0] - Project audit follow-up
 
 ### Added

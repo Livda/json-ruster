@@ -123,7 +123,7 @@ fn GraphView(data: DataNode) -> impl IntoView {
                 {move || {
                     selected.get()
                         .map(|id| graph.with_value(|g| g.path_to(id)))
-                        .unwrap_or_else(|| "Cliquez un noeud pour le selectionner (clic = plier/deplier)".to_string())
+                        .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
                 }}
             </div>
             <svg width="100%" height="100%">

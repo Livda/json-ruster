@@ -2,15 +2,15 @@
 
 > Interactive JSON/YAML/XML/CSV/TOML tree viewer — a Rust/WASM take on JSON Crack, no backend.
 
-Un clone de [JSON Crack](https://github.com/AykutSarac/jsoncrack.com) en Rust : visualisation interactive de JSON/YAML/XML/CSV/TOML sous forme d'arbre, sans backend, entièrement compilé en WebAssembly.
+A Rust clone of [JSON Crack](https://github.com/AykutSarac/jsoncrack.com): interactive tree visualization of JSON/YAML/XML/CSV/TOML, no backend, compiled entirely to WebAssembly.
 
 ## Stack
 
-- [Leptos](https://leptos.dev/) (CSR) pour l'UI réactive.
-- [Trunk](https://trunkrs.dev/) pour le build/bundling WASM.
-- Rendu du graphe en SVG natif (pas de canvas, pas de lib JS de graphe).
+- [Leptos](https://leptos.dev/) (CSR) for the reactive UI.
+- [Trunk](https://trunkrs.dev/) for the WASM build/bundling.
+- Graph rendered as native SVG (no canvas, no JS graph library).
 
-## Lancer en local
+## Running locally
 
 ```bash
 rustup target add wasm32-unknown-unknown
@@ -18,11 +18,11 @@ cargo install trunk
 trunk serve
 ```
 
-Puis ouvrir `http://127.0.0.1:8080` (ou le port indiqué).
+Then open `http://127.0.0.1:8080` (or whichever port is shown).
 
 ## Tests
 
-Les modules purs (parseurs, layout) sont testés hors navigateur :
+Pure modules (parsers, layout) are tested outside the browser:
 
 ```bash
 cargo test --lib
@@ -30,24 +30,25 @@ cargo test --lib
 
 ## Architecture
 
-- `src/model.rs` — représentation interne unifiée de la donnée (`DataNode`), pivot entre tous les formats.
-- `src/parsers/` — un module par format d'entrée (JSON, YAML, XML, CSV, TOML) convertissant vers `DataNode`, plus `Format` pour le dispatch et les exemples.
-- `src/graph.rs` — construction d'un arbre de nœuds affichables (`GraphNode`) à partir d'un `DataNode`, avec suivi du parent et calcul du chemin (`path_to`).
-- `src/layout.rs` — positionnement des nœuds (algorithme de type Reingold–Tilford simplifié), en tenant compte des nœuds repliés.
-- `src/main.rs` — composants Leptos (UI, éditeur, rendu SVG, pan/zoom, pli/dépli, sélection).
+- `src/model.rs` — unified internal data representation (`DataNode`), the pivot between all formats.
+- `src/parsers/` — one module per input format (JSON, YAML, XML, CSV, TOML) converting to `DataNode`, plus `Format` for dispatch and samples.
+- `src/graph.rs` — builds a tree of displayable nodes (`GraphNode`) from a `DataNode`, tracking parents and computing paths (`path_to`).
+- `src/layout.rs` — node positioning (simplified Reingold–Tilford-style algorithm), accounting for collapsed nodes and inline-expanded lines.
+- `src/main.rs` — Leptos components (UI, editor, SVG rendering, pan/zoom, collapse/expand, selection).
 
 ## Interactions
 
-- **Pan** : cliquer-glisser sur le graphe.
-- **Zoom** : molette.
-- **Plier/déplier** : cliquer sur un nœud ayant des enfants (indicateur `+N`/`-`) ; le clic sélectionne aussi le nœud et affiche son chemin en haut du panneau.
+- **Pan**: click-and-drag on the graph.
+- **Zoom**: mouse wheel.
+- **Collapse/expand**: click a node with children (`+N`/`-` indicator); the click also selects the node and shows its path at the top of the panel.
+- **Long values**: click the `[...]` marker to expand a truncated line in place (`[-]` to collapse it back).
 
 ## Roadmap
 
-Voir [CHANGELOG.md](./CHANGELOG.md) pour l'avancement détaillé.
+See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 
-1. **Socle** — parser JSON, layout d'arbre, rendu SVG statique. ✅
-2. **Interactivité** — pan/zoom, pli/dépli des nœuds, sélection. ✅
-3. **Multi-formats** — YAML, XML, CSV, TOML + éditeur synchronisé. ✅
-4. **Conversion & export** — conversion entre formats, export SVG/PNG.
-5. **Stretch** — thèmes, recherche, éditeur avec coloration syntaxique.
+1. **Foundation** — JSON parser, tree layout, static SVG rendering. ✅
+2. **Interactivity** — pan/zoom, collapse/expand nodes, selection. ✅
+3. **Multi-format** — YAML, XML, CSV, TOML + synced editor. ✅
+4. **Conversion & export** — format conversion, SVG/PNG export.
+5. **Stretch** — themes, search, syntax-highlighting editor.

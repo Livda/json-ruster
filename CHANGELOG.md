@@ -9,7 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 ### Added
 - Multi-stage `Dockerfile`: a `rust:slim-bookworm` stage builds the app with Trunk (`trunk build --release`), and the runtime stage is `nginx:alpine` serving the static output on port 80 — no Rust toolchain in the final image.
 - `.dockerignore` excluding `target`, `dist` and `.git` from the build context.
-- `docker-compose.yml`: `docker compose up --build` builds the image and exposes it on `http://127.0.0.1:8080`.
+- `compose.yaml`: `docker compose up --build` builds the image and exposes it on `http://127.0.0.1:8080`.
 
 ### Fixed
 - Editor textarea kept the browser's default white background/black text regardless of theme; it now follows `Theme.node_bg`/`text_color`.

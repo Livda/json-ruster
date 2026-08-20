@@ -72,4 +72,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 3. **Multi-format** — YAML, XML, CSV, TOML + synced editor. ✅
 4. **Conversion & export** — format conversion, SVG export, PNG export. ✅
 5. **Stretch** — light/dark theme ✅, search ✅, syntax-highlighting editor (not planned: would need a JS dependency like CodeMirror, out of scope for a pure-Rust/WASM app).
-6. **Docker** — multi-stage `Dockerfile` (Trunk build + nginx runtime) for a production image, plus `docker-compose.yml`. ✅
+6. **Docker** — multi-stage `Dockerfile` (Trunk build + nginx runtime) for a production image, plus `compose.yaml`. ✅

@@ -1,3 +1,4 @@
+use json_ruster::convert;
 use json_ruster::graph::{build_graph, Graph};
 use json_ruster::layout::{
     field_full_text, layout as compute_layout, truncate_display, wrap_text, FieldRef, NodeLayout,
@@ -8,11 +9,53 @@ use json_ruster::parsers::{self, Format};
 use leptos::ev::{MouseEvent, PointerEvent, WheelEvent};
 use leptos::prelude::*;
 use std::collections::{HashMap, HashSet};
+use wasm_bindgen::JsCast;
+
+const GRAPH_SVG_ID: &str = "jr-graph-svg";
+
+/// Triggers a browser download of `contents` as `filename` by creating an
+/// object URL and clicking a throwaway `<a download>` link -- there is no
+/// direct "save file" API available to a plain WASM/CSR app.
+fn download_text(filename: &str, mime: &str, contents: &str) {
+    let parts = js_sys::Array::new();
+    parts.push(&wasm_bindgen::JsValue::from_str(contents));
+    let opts = web_sys::BlobPropertyBag::new();
+    opts.set_type(mime);
+    let Ok(blob) = web_sys::Blob::new_with_str_sequence_and_options(&parts, &opts) else {
+        return;
+    };
+    let Ok(url) = web_sys::Url::create_object_url_with_blob(&blob) else {
+        return;
+    };
+
+    if let Some(document) = web_sys::window().and_then(|w| w.document()) {
+        if let Ok(element) = document.create_element("a") {
+            if let Ok(anchor) = element.dyn_into::<web_sys::HtmlAnchorElement>() {
+                anchor.set_href(&url);
+                anchor.set_download(filename);
+                anchor.click();
+            }
+        }
+    }
+    let _ = web_sys::Url::revoke_object_url(&url);
+}
+
+fn export_svg() {
+    let Some(svg) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id(GRAPH_SVG_ID))
+    else {
+        return;
+    };
+    download_text("graph.svg", "image/svg+xml", &svg.outer_html());
+}
 
 #[component]
 fn App() -> impl IntoView {
     let (format, set_format) = signal(Format::Json);
     let (input, set_input) = signal(Format::Json.sample().to_string());
+    let (convert_target, set_convert_target) = signal(Format::Yaml);
+    let (convert_error, set_convert_error) = signal(None::<String>);
 
     let parsed = Memo::new(move |_| parsers::parse(format.get(), &input.get()));
 
@@ -20,25 +63,68 @@ fn App() -> impl IntoView {
         if let Some(new_format) = Format::from_label(&event_target_value(&ev)) {
             set_format.set(new_format);
             set_input.set(new_format.sample().to_string());
+            set_convert_error.set(None);
+        }
+    };
+
+    let on_convert_target_change = move |ev| {
+        if let Some(new_format) = Format::from_label(&event_target_value(&ev)) {
+            set_convert_target.set(new_format);
+        }
+    };
+
+    let on_convert_click = move |_| {
+        let target = convert_target.get_untracked();
+        match parsed.get_untracked() {
+            Ok(data) => match convert::convert(&data, target) {
+                Ok(text) => {
+                    set_format.set(target);
+                    set_input.set(text);
+                    set_convert_error.set(None);
+                }
+                Err(e) => set_convert_error.set(Some(e)),
+            },
+            Err(_) => set_convert_error.set(Some("Fix the parsing error before converting".to_string())),
         }
     };
 
     view! {
         <div style="display:flex; flex-direction:column; height:100vh; width:100vw; font-family: sans-serif;">
-            <div style="padding:6px 10px; background:#1a202c; border-bottom:1px solid #2d3748;">
-                <label style="color:#a0aec0; font-size:13px; margin-right:6px;">"Format"</label>
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:6px 10px; background:#1a202c; border-bottom:1px solid #2d3748;">
+                <label style="color:#a0aec0; font-size:13px;">"Format"</label>
                 <select on:change=on_format_change>
                     {Format::ALL
                         .iter()
                         .map(|f| view! { <option value=f.label()>{f.label()}</option> })
                         .collect::<Vec<_>>()}
                 </select>
+
+                <span style="color:#4a5568; margin:0 4px;">"|"</span>
+
+                <label style="color:#a0aec0; font-size:13px;">"Convert to"</label>
+                <select on:change=on_convert_target_change>
+                    {Format::ALL
+                        .iter()
+                        .map(|f| view! { <option value=f.label()>{f.label()}</option> })
+                        .collect::<Vec<_>>()}
+                </select>
+                <button on:click=on_convert_click>"Convert"</button>
+
+                <span style="color:#4a5568; margin:0 4px;">"|"</span>
+                <button on:click=move |_| export_svg()>"Export SVG"</button>
+
+                {move || convert_error.get().map(|e| view! {
+                    <span style="color:#ff6b6b; font-size:12px;">{e}</span>
+                })}
             </div>
             <div style="display:flex; flex:1; min-height:0;">
                 <textarea
                     style="width:40%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em;"
                     prop:value=move || input.get()
-                    on:input=move |ev| set_input.set(event_target_value(&ev))
+                    on:input=move |ev| {
+                        set_input.set(event_target_value(&ev));
+                        set_convert_error.set(None);
+                    }
                 />
                 <div style="width:60%; height:100%; overflow:hidden; background:#0f1117;">
                     {move || match parsed.get() {
@@ -144,7 +230,7 @@ fn GraphView(data: DataNode) -> impl IntoView {
                         .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
                 }}
             </div>
-            <svg width="100%" height="100%">
+            <svg id=GRAPH_SVG_ID xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
                 <g style=move || format!("transform: translate({}px, {}px) scale({})", tx.get(), ty.get(), scale.get())>
                     {move || {
                         let collapsed_set = collapsed.get();

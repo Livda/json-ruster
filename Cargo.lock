@@ -671,6 +671,7 @@ dependencies = [
  "console_error_panic_hook",
  "console_log",
  "csv",
+ "js-sys",
  "leptos",
  "log",
  "roxmltree",

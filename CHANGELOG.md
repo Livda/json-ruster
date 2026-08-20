@@ -4,6 +4,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.4.0] - Milestone 4 — Conversion & export
+
+### Added
+- `convert::convert`: serializes a `DataNode` back to JSON, YAML, XML, CSV or TOML text, inferring numbers/booleans/null from scalar text instead of quoting everything as a string.
+- "Convert to" selector + button in the toolbar: rewrites the editor's content (and switches the active format) to the chosen target format.
+- "Export SVG" button: downloads the currently rendered graph as a standalone `.svg` file.
+
+### Notes
+- PNG export is not implemented yet: it needs an async image-load round trip (draw the SVG into an offscreen `<img>`/`<canvas>` in WASM) that didn't fit this pass; left for a follow-up.
+- TOML has no null type, so `DataNode::Null` becomes an empty string when converting to TOML.
+- CSV export requires a top-level array of objects; nested object/array values inside a row are dropped (flattening them is out of scope for now).
+
 ### Fixed
 - Vertical overlap between boxes when a node had more fields than the fixed row height allowed: each row's height is now computed dynamically (tallest node in the previous row), instead of a `LEVEL_HEIGHT` constant.
 - Text overflowing outside boxes for very long values (e.g. paragraphs of text): "key: value" lines and the title are now truncated to 48 characters (`layout::truncate_display` / `field_text`).

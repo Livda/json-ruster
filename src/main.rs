@@ -95,18 +95,29 @@ fn GraphView(data: DataNode) -> impl IntoView {
     };
 
     let toggle = move |id: usize| {
+        // Collapsing/expanding reshapes the whole layout, so the clicked
+        // node can shift far away in local layout coordinates (e.g. a root
+        // centered over a wide subtree jumps back to x=0 once collapsed).
+        // Compensate the pan by exactly that shift so the clicked node
+        // stays under the cursor instead of the view jumping around.
+        let expanded_set = expanded.get_untracked();
+        let before = collapsed.get_untracked();
+        let pos_before = graph.with_value(|g| compute_layout(g, &before, &expanded_set));
+
         set_collapsed.update(|set| {
             if !set.remove(&id) {
                 set.insert(id);
             }
         });
-        // Collapsing/expanding reshapes the whole layout, so the current
-        // pan/zoom can easily leave the affected node (or everything else)
-        // outside the viewport. Reset the view rather than leaving it
-        // pointing at empty space.
-        set_scale.set(1.0);
-        set_tx.set(0.0);
-        set_ty.set(0.0);
+
+        let after = collapsed.get_untracked();
+        let pos_after = graph.with_value(|g| compute_layout(g, &after, &expanded_set));
+
+        if let (Some(before_pos), Some(after_pos)) = (pos_before.get(&id), pos_after.get(&id)) {
+            let s = scale.get_untracked();
+            set_tx.update(|v| *v += s * (before_pos.x - after_pos.x));
+            set_ty.update(|v| *v += s * (before_pos.y - after_pos.y));
+        }
     };
     let select = move |id: usize| set_selected.set(Some(id));
     let toggle_expand = move |key: (usize, FieldRef)| {

@@ -18,11 +18,22 @@ wasm_bindgen_test_configure!(run_in_browser);
 /// alive for the duration of the test (dropping it unmounts and disposes
 /// the reactive owner) and should remove the container afterwards so
 /// successive tests don't see each other's DOM.
+///
+/// All tests in this file share one browser page, so `App`'s `localStorage`
+/// persistence (and the URL hash a share link would use) would otherwise
+/// leak from one test's mount into the next's initial state -- reset both
+/// before mounting so every test starts from the same default document.
 fn mount_app() -> (
     web_sys::Element,
     leptos::mount::UnmountHandle<impl leptos::tachys::view::Mountable>,
 ) {
-    let document = web_sys::window().unwrap().document().unwrap();
+    let window = web_sys::window().unwrap();
+    if let Ok(Some(storage)) = window.local_storage() {
+        let _ = storage.clear();
+    }
+    let _ = window.location().set_hash("");
+
+    let document = window.document().unwrap();
     let container = document.create_element("div").unwrap();
     document.body().unwrap().append_child(&container).unwrap();
     let handle = mount_to(container.clone().unchecked_into(), App);
@@ -121,6 +132,29 @@ async fn theme_toggle_changes_the_page_background() {
 
     let after = root.style().get_property_value("background").unwrap();
     assert_ne!(before, after);
+
+    container.remove();
+}
+
+#[wasm_bindgen_test]
+async fn fullscreen_buttons_are_rendered_and_clickable() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    // One for the editor, one for the graph panel.
+    let buttons = container
+        .query_selector_all("button[title='Toggle fullscreen']")
+        .unwrap();
+    assert_eq!(buttons.length(), 2);
+
+    // Headless Chrome rejects the actual fullscreen request (no user
+    // activation), but the click handler ignores that -- this just checks
+    // it doesn't panic/throw.
+    for i in 0..buttons.length() {
+        let button: web_sys::HtmlElement = buttons.get(i).unwrap().unchecked_into();
+        button.click();
+    }
+    tick().await;
 
     container.remove();
 }

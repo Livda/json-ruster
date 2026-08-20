@@ -211,6 +211,21 @@ fn copy_to_clipboard(text: &str) {
     }
 }
 
+/// Toggles OS-level fullscreen (the Fullscreen API, not just an in-page
+/// "maximize") for `el`. Checking `document.fullscreen_element()` rather
+/// than tracking our own state means this stays correct even if the user
+/// exits fullscreen some other way (Esc, browser UI).
+fn toggle_fullscreen(el: web_sys::Element) {
+    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+        return;
+    };
+    if document.fullscreen_element().is_some() {
+        document.exit_fullscreen();
+    } else {
+        let _ = el.request_fullscreen();
+    }
+}
+
 /// Clicks a throwaway `<a download>` link -- there is no direct "save file"
 /// API available to a plain WASM/CSR app.
 fn trigger_download(filename: &str, url: &str) {
@@ -396,6 +411,7 @@ pub fn App() -> impl IntoView {
     let (copied, set_copied) = signal(false);
     let (share_copied, set_share_copied) = signal(false);
     let (share_error, set_share_error) = signal(None::<String>);
+    let editor_ref: NodeRef<leptos::html::Div> = NodeRef::new();
 
     // Remember the current document and theme locally so a reload picks up
     // where the user left off.
@@ -581,17 +597,35 @@ pub fn App() -> impl IntoView {
                 })}
             </div>
             <div style="display:flex; flex:1; min-height:0;">
-                <textarea
-                    style=move || format!(
-                        "width:40%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
-                        theme().toolbar_border, theme().node_bg, theme().text_color
-                    )
-                    prop:value=move || input.get()
-                    on:input=move |ev| {
-                        set_input.set(event_target_value(&ev));
-                        set_convert_error.set(None);
-                    }
-                />
+                <div node_ref=editor_ref style="position:relative; width:40%; height:100%;">
+                    <textarea
+                        style=move || format!(
+                            "width:100%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
+                            theme().toolbar_border, theme().node_bg, theme().text_color
+                        )
+                        prop:value=move || input.get()
+                        on:input=move |ev| {
+                            set_input.set(event_target_value(&ev));
+                            set_convert_error.set(None);
+                        }
+                    />
+                    <button
+                        title="Toggle fullscreen"
+                        on:click=move |_| {
+                            if let Some(el) = editor_ref.get() {
+                                toggle_fullscreen(el.into());
+                            }
+                        }
+                        style=move || format!(
+                            "position:absolute; top:8px; right:8px; border:1px solid {}; \
+                             background:{}cc; color:{}; border-radius:4px; padding:2px 6px; \
+                             font-size:12px; cursor:pointer;",
+                            theme().toolbar_border, theme().node_bg, theme().text_color
+                        )
+                    >
+                        "⛶"
+                    </button>
+                </div>
                 <div style=move || format!("width:60%; height:100%; overflow:hidden; background:{};", theme().graph_bg)>
                     {move || match parsed.get() {
                         Ok(data) => view! { <GraphView data=data theme=theme() search=search /> }.into_any(),
@@ -611,6 +645,7 @@ pub fn App() -> impl IntoView {
 #[component]
 fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl IntoView {
     let graph = StoredValue::new(build_graph(&data));
+    let root_ref: NodeRef<leptos::html::Div> = NodeRef::new();
 
     let (collapsed, set_collapsed) = signal(HashSet::<usize>::new());
     let (selected, set_selected) = signal(None::<usize>);
@@ -734,9 +769,11 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
 
     view! {
         <div
+            node_ref=root_ref
             style=move || format!(
-                "width:100%; height:100%; position:relative; cursor:{};",
-                if is_dragging.get() { "grabbing" } else { "grab" }
+                "width:100%; height:100%; position:relative; cursor:{}; background:{};",
+                if is_dragging.get() { "grabbing" } else { "grab" },
+                theme.graph_bg
             )
             on:pointerdown=on_pointer_down
             on:wheel=on_wheel
@@ -758,6 +795,17 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     }}
                 </span>
                 <span>
+                    <button
+                        title="Toggle fullscreen"
+                        style=control_style(theme)
+                        on:click=move |_| {
+                            if let Some(el) = root_ref.get() {
+                                toggle_fullscreen(el.into());
+                            }
+                        }
+                    >
+                        "⛶"
+                    </button>
                     <button style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
                     <button style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>

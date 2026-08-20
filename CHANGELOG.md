@@ -4,6 +4,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.3] - Fullscreen mode
+
+### Added
+- A "⛶" button on both the editor and the graph panel toggles fullscreen (Fullscreen API) for that panel independently.
+
+### Fixed
+- `tests/ui.rs`'s DOM suite runs all tests in one shared browser page, so `localStorage` (and the URL hash) written by one test leaked into the next test's initial state; `mount_app()` now clears both before each mount so every test starts from the same default document regardless of run order.
+
 ## [0.11.2] - Surface coverage on GitHub
 
 ### Added

@@ -209,7 +209,7 @@ fn truncatable_lines(
                         {is_last.then(|| view! {
                             <tspan
                                 fill="#63b3ed"
-                                style="cursor:pointer; text-decoration:underline;"
+                                style="cursor:pointer;"
                                 on:click=move |ev: MouseEvent| {
                                     ev.stop_propagation();
                                     toggle_expand(key);
@@ -232,7 +232,7 @@ fn truncatable_lines(
                 {truncated.then(|| view! {
                     <tspan
                         fill="#63b3ed"
-                        style="cursor:pointer; text-decoration:underline;"
+                        style="cursor:pointer;"
                         on:click=move |ev: MouseEvent| {
                             ev.stop_propagation();
                             toggle_expand(key);

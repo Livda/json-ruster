@@ -20,6 +20,21 @@ trunk serve
 
 Then open `http://127.0.0.1:8080` (or whichever port is shown).
 
+## Running with Docker
+
+```bash
+docker build -t json-ruster .
+docker run --rm -p 8080:80 json-ruster
+```
+
+Or with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Then open `http://127.0.0.1:8080`. The image is a multi-stage build: a `rust:slim` stage compiles the app with Trunk (`trunk build --release`), and the runtime stage is `nginx:alpine` serving the static `dist/` output — no Rust toolchain in the final image.
+
 ## Tests
 
 Pure modules (parsers, layout) are tested outside the browser:
@@ -57,3 +72,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 3. **Multi-format** — YAML, XML, CSV, TOML + synced editor. ✅
 4. **Conversion & export** — format conversion, SVG export, PNG export. ✅
 5. **Stretch** — light/dark theme ✅, search ✅, syntax-highlighting editor (not planned: would need a JS dependency like CodeMirror, out of scope for a pure-Rust/WASM app).
+6. **Docker** — multi-stage `Dockerfile` (Trunk build + nginx runtime) for a production image, plus `docker-compose.yml`. ✅

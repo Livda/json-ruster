@@ -344,7 +344,10 @@ fn App() -> impl IntoView {
             </div>
             <div style="display:flex; flex:1; min-height:0;">
                 <textarea
-                    style="width:40%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em;"
+                    style=move || format!(
+                        "width:40%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
+                        theme().toolbar_border, theme().node_bg, theme().text_color
+                    )
                     prop:value=move || input.get()
                     on:input=move |ev| {
                         set_input.set(event_target_value(&ev));

@@ -1,5 +1,7 @@
 # json-ruster
 
+> Interactive JSON/YAML/XML/CSV/TOML tree viewer — a Rust/WASM take on JSON Crack, no backend.
+
 Un clone de [JSON Crack](https://github.com/AykutSarac/jsoncrack.com) en Rust : visualisation interactive de JSON/YAML/XML/CSV/TOML sous forme d'arbre, sans backend, entièrement compilé en WebAssembly.
 
 ## Stack

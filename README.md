@@ -30,16 +30,22 @@ cargo test --lib
 
 - `src/model.rs` — représentation interne unifiée de la donnée (`DataNode`), pivot entre tous les formats.
 - `src/parsers/` — un module par format d'entrée, convertissant vers `DataNode`.
-- `src/graph.rs` — construction d'un arbre de nœuds affichables (`GraphNode`) à partir d'un `DataNode`.
-- `src/layout.rs` — positionnement des nœuds (algorithme de type Reingold–Tilford simplifié).
-- `src/main.rs` — composants Leptos (UI, éditeur, rendu SVG).
+- `src/graph.rs` — construction d'un arbre de nœuds affichables (`GraphNode`) à partir d'un `DataNode`, avec suivi du parent et calcul du chemin (`path_to`).
+- `src/layout.rs` — positionnement des nœuds (algorithme de type Reingold–Tilford simplifié), en tenant compte des nœuds repliés.
+- `src/main.rs` — composants Leptos (UI, éditeur, rendu SVG, pan/zoom, pli/dépli, sélection).
+
+## Interactions
+
+- **Pan** : cliquer-glisser sur le graphe.
+- **Zoom** : molette.
+- **Plier/déplier** : cliquer sur un nœud ayant des enfants (indicateur `+N`/`-`) ; le clic sélectionne aussi le nœud et affiche son chemin en haut du panneau.
 
 ## Roadmap
 
 Voir [CHANGELOG.md](./CHANGELOG.md) pour l'avancement détaillé.
 
 1. **Socle** — parser JSON, layout d'arbre, rendu SVG statique. ✅
-2. **Interactivité** — pan/zoom, pli/dépli des nœuds, sélection.
+2. **Interactivité** — pan/zoom, pli/dépli des nœuds, sélection. ✅
 3. **Multi-formats** — YAML, XML, CSV, TOML + éditeur synchronisé.
 4. **Conversion & export** — conversion entre formats, export SVG/PNG.
 5. **Stretch** — thèmes, recherche, éditeur avec coloration syntaxique.

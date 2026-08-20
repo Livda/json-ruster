@@ -1,8 +1,17 @@
 # Changelog
 
-Format basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/).
+Format basé sur [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
+
+## [0.2.0] - Jalon 2 — Interactivité
+
+### Ajouté
+- Pan (glisser) et zoom (molette) sur le graphe via transform CSS, écouteurs `pointerdown`/`pointermove`/`pointerup`/`wheel`.
+- Pli/dépli d'un sous-arbre au clic sur un nœud, avec indicateur (`+N` replié / `-` déplié) ; le layout ne calcule plus que les nœuds visibles.
+- Sélection de nœud (contour surligné) avec affichage du chemin (ex. `root.tags[0]`) dans un bandeau au-dessus du graphe.
+- `GraphNode::parent` et `Graph::path_to` pour reconstruire le chemin d'un nœud jusqu'à la racine.
+- Tests unitaires pour `path_to` et pour le layout avec nœuds repliés.
 
 ## [0.1.0] - Jalon 1 — Socle
 

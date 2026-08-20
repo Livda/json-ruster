@@ -1,5 +1,5 @@
 use crate::graph::{Graph, GraphNode};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, Copy)]
 pub struct NodeLayout {
@@ -20,7 +20,11 @@ const MIN_WIDTH: f64 = 100.0;
 /// right via a single running offset, and each internal node is centered
 /// over its children. Sharing one running offset across the whole
 /// post-order traversal guarantees sibling subtrees never overlap.
-pub fn layout(graph: &Graph) -> HashMap<usize, NodeLayout> {
+///
+/// Nodes whose id is in `collapsed` are laid out as leaves: their children
+/// are skipped entirely, so the returned map only contains currently
+/// visible nodes.
+pub fn layout(graph: &Graph, collapsed: &HashSet<usize>) -> HashMap<usize, NodeLayout> {
     let sizes: HashMap<usize, (f64, f64)> = graph
         .nodes
         .iter()
@@ -29,11 +33,19 @@ pub fn layout(graph: &Graph) -> HashMap<usize, NodeLayout> {
 
     let mut x_by_id: HashMap<usize, f64> = HashMap::new();
     let mut next_x = 0.0f64;
-    assign_x(graph, graph.root, &sizes, &mut next_x, &mut x_by_id);
+    assign_x(graph, graph.root, collapsed, &sizes, &mut next_x, &mut x_by_id);
 
     let mut result = HashMap::new();
-    assign_y(graph, graph.root, 0, &sizes, &x_by_id, &mut result);
+    assign_y(graph, graph.root, collapsed, 0, &sizes, &x_by_id, &mut result);
     result
+}
+
+fn children_of<'a>(graph: &'a Graph, collapsed: &HashSet<usize>, id: usize) -> &'a [usize] {
+    if collapsed.contains(&id) {
+        &[]
+    } else {
+        &graph.nodes[id].children
+    }
 }
 
 fn node_size(node: &GraphNode) -> (f64, f64) {
@@ -56,21 +68,22 @@ fn node_size(node: &GraphNode) -> (f64, f64) {
 fn assign_x(
     graph: &Graph,
     id: usize,
+    collapsed: &HashSet<usize>,
     sizes: &HashMap<usize, (f64, f64)>,
     next_x: &mut f64,
     x_by_id: &mut HashMap<usize, f64>,
 ) {
-    let node = &graph.nodes[id];
-    if node.children.is_empty() {
+    let children = children_of(graph, collapsed, id);
+    if children.is_empty() {
         let (w, _) = sizes[&id];
         x_by_id.insert(id, *next_x);
         *next_x += w + SIBLING_SPACING;
     } else {
-        for &child in &node.children {
-            assign_x(graph, child, sizes, next_x, x_by_id);
+        for &child in children {
+            assign_x(graph, child, collapsed, sizes, next_x, x_by_id);
         }
-        let first = *node.children.first().unwrap();
-        let last = *node.children.last().unwrap();
+        let first = *children.first().unwrap();
+        let last = *children.last().unwrap();
         let (last_w, _) = sizes[&last];
         let center = (x_by_id[&first] + (x_by_id[&last] + last_w)) / 2.0 - sizes[&id].0 / 2.0;
         x_by_id.insert(id, center);
@@ -80,6 +93,7 @@ fn assign_x(
 fn assign_y(
     graph: &Graph,
     id: usize,
+    collapsed: &HashSet<usize>,
     depth: usize,
     sizes: &HashMap<usize, (f64, f64)>,
     x_by_id: &HashMap<usize, f64>,
@@ -95,8 +109,8 @@ fn assign_y(
             height,
         },
     );
-    for &child in &graph.nodes[id].children {
-        assign_y(graph, child, depth + 1, sizes, x_by_id, result);
+    for &child in children_of(graph, collapsed, id) {
+        assign_y(graph, child, collapsed, depth + 1, sizes, x_by_id, result);
     }
 }
 
@@ -119,7 +133,7 @@ mod tests {
             ),
         ]);
         let graph = build_graph(&data);
-        let positions = layout(&graph);
+        let positions = layout(&graph, &HashSet::new());
 
         let a_id = graph.nodes[graph.root].children[0];
         let b_id = graph.nodes[graph.root].children[1];
@@ -135,9 +149,30 @@ mod tests {
             DataNode::Object(vec![("name".into(), DataNode::Scalar("A".into()))]),
         )]);
         let graph = build_graph(&data);
-        let positions = layout(&graph);
+        let positions = layout(&graph, &HashSet::new());
         let child_id = graph.nodes[graph.root].children[0];
         assert_eq!(positions[&child_id].y, LEVEL_HEIGHT);
         assert_eq!(positions[&graph.root].y, 0.0);
+    }
+
+    #[test]
+    fn collapsing_a_node_hides_its_descendants() {
+        let data = DataNode::Object(vec![(
+            "author".into(),
+            DataNode::Object(vec![(
+                "address".into(),
+                DataNode::Object(vec![("city".into(), DataNode::Scalar("Paris".into()))]),
+            )]),
+        )]);
+        let graph = build_graph(&data);
+        let author_id = graph.nodes[graph.root].children[0];
+
+        let mut collapsed = HashSet::new();
+        collapsed.insert(author_id);
+        let positions = layout(&graph, &collapsed);
+
+        assert!(positions.contains_key(&graph.root));
+        assert!(positions.contains_key(&author_id));
+        assert_eq!(positions.len(), 2, "grandchildren of a collapsed node must not be laid out");
     }
 }

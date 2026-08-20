@@ -9,6 +9,25 @@ pub struct NodeLayout {
     pub height: f64,
 }
 
+/// Direction the tree grows in. `Vertical` (the default) stacks rows
+/// top-to-bottom with siblings spread along x, like the rest of this
+/// module's naming assumes; `Horizontal` is the same tree turned 90
+/// degrees, stacking columns left-to-right with siblings spread along y.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Orientation {
+    Vertical,
+    Horizontal,
+}
+
+impl Orientation {
+    pub fn toggle(self) -> Self {
+        match self {
+            Orientation::Vertical => Orientation::Horizontal,
+            Orientation::Horizontal => Orientation::Vertical,
+        }
+    }
+}
+
 /// Identifies a single displayed line within a node: either its title or
 /// one of its "key: value" fields. Used as the key for tracking which
 /// lines are expanded to show their full (untruncated) text.
@@ -102,6 +121,7 @@ pub fn layout(
     graph: &Graph,
     collapsed: &HashSet<usize>,
     expanded: &HashSet<(usize, FieldRef)>,
+    orientation: Orientation,
 ) -> HashMap<usize, NodeLayout> {
     let sizes: HashMap<usize, (f64, f64)> = graph
         .nodes
@@ -109,39 +129,56 @@ pub fn layout(
         .map(|node| (node.id, node_size(node, expanded)))
         .collect();
 
-    let mut x_by_id: HashMap<usize, f64> = HashMap::new();
-    let mut next_x = 0.0f64;
-    assign_x(
+    // The tree always grows along a "main" axis (depth) and spreads
+    // siblings along a "cross" axis; which screen axis (x or y) plays which
+    // role is the only thing `orientation` changes.
+    let main_of = |(w, h): (f64, f64)| match orientation {
+        Orientation::Vertical => h,
+        Orientation::Horizontal => w,
+    };
+    let cross_of = |(w, h): (f64, f64)| match orientation {
+        Orientation::Vertical => w,
+        Orientation::Horizontal => h,
+    };
+
+    let mut cross_by_id: HashMap<usize, f64> = HashMap::new();
+    let mut next_cross = 0.0f64;
+    assign_cross(
         graph,
         graph.root,
         collapsed,
         &sizes,
-        &mut next_x,
-        &mut x_by_id,
+        cross_of,
+        &mut next_cross,
+        &mut cross_by_id,
     );
 
     let mut depth_by_id: HashMap<usize, usize> = HashMap::new();
     collect_depths(graph, graph.root, collapsed, 0, &mut depth_by_id);
 
     let max_depth = depth_by_id.values().copied().max().unwrap_or(0);
-    let mut row_height = vec![0.0_f64; max_depth + 1];
+    let mut row_main = vec![0.0_f64; max_depth + 1];
     for (&id, &depth) in &depth_by_id {
-        row_height[depth] = row_height[depth].max(sizes[&id].1);
+        row_main[depth] = row_main[depth].max(main_of(sizes[&id]));
     }
-    let mut row_y = vec![0.0_f64; max_depth + 1];
+    let mut row_offset = vec![0.0_f64; max_depth + 1];
     for depth in 1..=max_depth {
-        row_y[depth] = row_y[depth - 1] + row_height[depth - 1] + VERTICAL_SPACING;
+        row_offset[depth] = row_offset[depth - 1] + row_main[depth - 1] + VERTICAL_SPACING;
     }
 
     depth_by_id
         .into_iter()
         .map(|(id, depth)| {
             let (width, height) = sizes[&id];
+            let (x, y) = match orientation {
+                Orientation::Vertical => (cross_by_id[&id], row_offset[depth]),
+                Orientation::Horizontal => (row_offset[depth], cross_by_id[&id]),
+            };
             (
                 id,
                 NodeLayout {
-                    x: x_by_id[&id],
-                    y: row_y[depth],
+                    x,
+                    y,
                     width,
                     height,
                 },
@@ -208,28 +245,38 @@ fn node_size(node: &GraphNode, expanded: &HashSet<(usize, FieldRef)>) -> (f64, f
     (width, height)
 }
 
-fn assign_x(
+fn assign_cross(
     graph: &Graph,
     id: usize,
     collapsed: &HashSet<usize>,
     sizes: &HashMap<usize, (f64, f64)>,
-    next_x: &mut f64,
-    x_by_id: &mut HashMap<usize, f64>,
+    cross_of: impl Fn((f64, f64)) -> f64 + Copy,
+    next_cross: &mut f64,
+    cross_by_id: &mut HashMap<usize, f64>,
 ) {
     let children = children_of(graph, collapsed, id);
     if children.is_empty() {
-        let (w, _) = sizes[&id];
-        x_by_id.insert(id, *next_x);
-        *next_x += w + SIBLING_SPACING;
+        let size = cross_of(sizes[&id]);
+        cross_by_id.insert(id, *next_cross);
+        *next_cross += size + SIBLING_SPACING;
     } else {
         for &child in children {
-            assign_x(graph, child, collapsed, sizes, next_x, x_by_id);
+            assign_cross(
+                graph,
+                child,
+                collapsed,
+                sizes,
+                cross_of,
+                next_cross,
+                cross_by_id,
+            );
         }
         let first = *children.first().unwrap();
         let last = *children.last().unwrap();
-        let (last_w, _) = sizes[&last];
-        let center = (x_by_id[&first] + (x_by_id[&last] + last_w)) / 2.0 - sizes[&id].0 / 2.0;
-        x_by_id.insert(id, center);
+        let last_size = cross_of(sizes[&last]);
+        let center = (cross_by_id[&first] + (cross_by_id[&last] + last_size)) / 2.0
+            - cross_of(sizes[&id]) / 2.0;
+        cross_by_id.insert(id, center);
     }
 }
 
@@ -274,7 +321,12 @@ mod tests {
     fn node_width_is_bounded_for_long_field_values() {
         let data = DataNode::Object(vec![("about".into(), DataNode::Scalar("a".repeat(2000)))]);
         let graph = build_graph(&data);
-        let positions = layout(&graph, &no_collapsed(), &no_expanded());
+        let positions = layout(
+            &graph,
+            &no_collapsed(),
+            &no_expanded(),
+            Orientation::Vertical,
+        );
         let width = positions[&graph.root].width;
         let max_chars = MAX_FIELD_CHARS + MORE_MARKER.chars().count();
         let max_expected = max_chars as f64 * CHAR_WIDTH + BOX_PADDING * 2.0;
@@ -288,11 +340,16 @@ mod tests {
     fn expanding_a_field_grows_node_height_without_growing_width() {
         let data = DataNode::Object(vec![("about".into(), DataNode::Scalar("a".repeat(200)))]);
         let graph = build_graph(&data);
-        let collapsed_positions = layout(&graph, &no_collapsed(), &no_expanded());
+        let collapsed_positions = layout(
+            &graph,
+            &no_collapsed(),
+            &no_expanded(),
+            Orientation::Vertical,
+        );
 
         let mut expanded = HashSet::new();
         expanded.insert((graph.root, FieldRef::Field(0)));
-        let expanded_positions = layout(&graph, &no_collapsed(), &expanded);
+        let expanded_positions = layout(&graph, &no_collapsed(), &expanded, Orientation::Vertical);
 
         assert!(expanded_positions[&graph.root].height > collapsed_positions[&graph.root].height);
         assert_eq!(
@@ -314,7 +371,12 @@ mod tests {
             ),
         ]);
         let graph = build_graph(&data);
-        let positions = layout(&graph, &no_collapsed(), &no_expanded());
+        let positions = layout(
+            &graph,
+            &no_collapsed(),
+            &no_expanded(),
+            Orientation::Vertical,
+        );
 
         let a_id = graph.nodes[graph.root].children[0];
         let b_id = graph.nodes[graph.root].children[1];
@@ -339,7 +401,12 @@ mod tests {
             ),
         ]);
         let graph = build_graph(&data);
-        let positions = layout(&graph, &no_collapsed(), &no_expanded());
+        let positions = layout(
+            &graph,
+            &no_collapsed(),
+            &no_expanded(),
+            Orientation::Vertical,
+        );
 
         let root = positions[&graph.root];
         let child_id = graph.nodes[graph.root].children[0];
@@ -366,7 +433,7 @@ mod tests {
 
         let mut collapsed = HashSet::new();
         collapsed.insert(author_id);
-        let positions = layout(&graph, &collapsed, &no_expanded());
+        let positions = layout(&graph, &collapsed, &no_expanded(), Orientation::Vertical);
 
         assert!(positions.contains_key(&graph.root));
         assert!(positions.contains_key(&author_id));
@@ -374,6 +441,37 @@ mod tests {
             positions.len(),
             2,
             "grandchildren of a collapsed node must not be laid out"
+        );
+    }
+
+    #[test]
+    fn orientation_toggle_swaps_vertical_and_horizontal() {
+        assert_eq!(Orientation::Vertical.toggle(), Orientation::Horizontal);
+        assert_eq!(Orientation::Horizontal.toggle(), Orientation::Vertical);
+    }
+
+    #[test]
+    fn horizontal_orientation_grows_along_x_instead_of_y() {
+        let data = DataNode::Object(vec![(
+            "child".into(),
+            DataNode::Object(vec![("x".into(), DataNode::Scalar("1".into()))]),
+        )]);
+        let graph = build_graph(&data);
+        let child_id = graph.nodes[graph.root].children[0];
+
+        let positions = layout(
+            &graph,
+            &no_collapsed(),
+            &no_expanded(),
+            Orientation::Horizontal,
+        );
+        let root = positions[&graph.root];
+        let child = positions[&child_id];
+
+        assert_eq!(root.x, 0.0);
+        assert!(
+            child.x >= root.x + root.width,
+            "expected child column {child:?} to start right of the root {root:?}"
         );
     }
 }

@@ -2,7 +2,7 @@ use crate::convert;
 use crate::graph::{build_graph, Graph};
 use crate::layout::{
     field_full_text, layout as compute_layout, truncate_display, wrap_text, FieldRef, NodeLayout,
-    LESS_MARKER, LINE_HEIGHT, MORE_MARKER,
+    Orientation, LESS_MARKER, LINE_HEIGHT, MORE_MARKER,
 };
 use crate::model::DataNode;
 use crate::parsers::{self, Format};
@@ -316,6 +316,7 @@ fn render_static_svg(
     positions: &HashMap<usize, NodeLayout>,
     expanded: &HashSet<(usize, FieldRef)>,
     theme: Theme,
+    orientation: Orientation,
 ) -> (String, f64, f64) {
     let width = positions
         .values()
@@ -338,13 +339,17 @@ fn render_static_svg(
     for (&id, from) in positions {
         for &child_id in &graph.nodes[id].children {
             if let Some(to) = positions.get(&child_id) {
-                let x1 = from.x + from.width / 2.0;
-                let y1 = from.y + from.height;
-                let x2 = to.x + to.width / 2.0;
-                let y2 = to.y;
-                let mid_y = (y1 + y2) / 2.0;
+                let [x1, y1, x2, y2, mid] = edge_anchors(*from, *to, orientation);
+                let d = match orientation {
+                    Orientation::Vertical => {
+                        format!("M {x1} {y1} C {x1} {mid}, {x2} {mid}, {x2} {y2}")
+                    }
+                    Orientation::Horizontal => {
+                        format!("M {x1} {y1} C {mid} {y1}, {mid} {y2}, {x2} {y2}")
+                    }
+                };
                 svg.push_str(&format!(
-                    "<path d=\"M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"1.5\" />\n",
+                    "<path d=\"{d}\" fill=\"none\" stroke=\"{}\" stroke-width=\"1.5\" />\n",
                     theme.edge_color
                 ));
             }
@@ -650,6 +655,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     let (collapsed, set_collapsed) = signal(HashSet::<usize>::new());
     let (selected, set_selected) = signal(None::<usize>);
     let (expanded, set_expanded) = signal(HashSet::<(usize, FieldRef)>::new());
+    let (orientation, set_orientation) = signal(Orientation::Vertical);
 
     // A search match hidden under a collapsed ancestor would otherwise stay
     // invisible, defeating the point of searching. Expand every ancestor of
@@ -723,8 +729,10 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         // Compensate the pan by exactly that shift so the clicked node
         // stays under the cursor instead of the view jumping around.
         let expanded_set = expanded.get_untracked();
+        let orientation_value = orientation.get_untracked();
         let before = collapsed.get_untracked();
-        let pos_before = graph.with_value(|g| compute_layout(g, &before, &expanded_set));
+        let pos_before =
+            graph.with_value(|g| compute_layout(g, &before, &expanded_set, orientation_value));
 
         set_collapsed.update(|set| {
             if !set.remove(&id) {
@@ -733,7 +741,8 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         });
 
         let after = collapsed.get_untracked();
-        let pos_after = graph.with_value(|g| compute_layout(g, &after, &expanded_set));
+        let pos_after =
+            graph.with_value(|g| compute_layout(g, &after, &expanded_set, orientation_value));
 
         if let (Some(before_pos), Some(after_pos)) = (pos_before.get(&id), pos_after.get(&id)) {
             let s = scale.get_untracked();
@@ -753,9 +762,10 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     let render_export_svg = move || {
         let collapsed_set = collapsed.get_untracked();
         let expanded_set = expanded.get_untracked();
+        let orientation_value = orientation.get_untracked();
         graph.with_value(|g| {
-            let positions = compute_layout(g, &collapsed_set, &expanded_set);
-            render_static_svg(g, &positions, &expanded_set, theme)
+            let positions = compute_layout(g, &collapsed_set, &expanded_set, orientation_value);
+            render_static_svg(g, &positions, &expanded_set, theme, orientation_value)
         })
     };
     let on_export_svg = move |_: MouseEvent| {
@@ -806,6 +816,13 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     >
                         "⛶"
                     </button>
+                    <button
+                        title="Rotate 90°"
+                        style=control_style(theme)
+                        on:click=move |_| set_orientation.update(|o| *o = o.toggle())
+                    >
+                        "↻"
+                    </button>
                     <button style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
                     <button style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>
@@ -815,12 +832,14 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     {move || {
                         let collapsed_set = collapsed.get();
                         let expanded_set = expanded.get();
+                        let orientation_value = orientation.get();
                         let sel = selected.get();
                         let query = search.get().to_lowercase();
                         graph.with_value(|g| {
-                            let positions = compute_layout(g, &collapsed_set, &expanded_set);
+                            let positions =
+                                compute_layout(g, &collapsed_set, &expanded_set, orientation_value);
                             let matches = find_matches(g, &query);
-                            let edges = render_edges(g, &positions, theme);
+                            let edges = render_edges(g, &positions, theme, orientation_value);
                             let nodes = render_nodes(
                                 g,
                                 &positions,
@@ -847,10 +866,34 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     }
 }
 
+/// Anchor points for the edge connecting `from` to `to`: the midpoint of
+/// `from`'s trailing edge (bottom in `Vertical`, right in `Horizontal`) and
+/// `to`'s leading edge (top / left), plus the control-point coordinate the
+/// bezier curve bulges towards along the growth axis.
+fn edge_anchors(from: NodeLayout, to: NodeLayout, orientation: Orientation) -> [f64; 5] {
+    match orientation {
+        Orientation::Vertical => {
+            let x1 = from.x + from.width / 2.0;
+            let y1 = from.y + from.height;
+            let x2 = to.x + to.width / 2.0;
+            let y2 = to.y;
+            [x1, y1, x2, y2, (y1 + y2) / 2.0]
+        }
+        Orientation::Horizontal => {
+            let x1 = from.x + from.width;
+            let y1 = from.y + from.height / 2.0;
+            let x2 = to.x;
+            let y2 = to.y + to.height / 2.0;
+            [x1, y1, x2, y2, (x1 + x2) / 2.0]
+        }
+    }
+}
+
 fn render_edges(
     graph: &Graph,
     positions: &HashMap<usize, NodeLayout>,
     theme: Theme,
+    orientation: Orientation,
 ) -> Vec<impl IntoView> {
     positions
         .keys()
@@ -861,14 +904,17 @@ fn render_edges(
                 .iter()
                 .filter_map(move |&child_id| {
                     positions.get(&child_id).map(|&to| {
-                    let x1 = from.x + from.width / 2.0;
-                    let y1 = from.y + from.height;
-                    let x2 = to.x + to.width / 2.0;
-                    let y2 = to.y;
-                    let mid_y = (y1 + y2) / 2.0;
-                    let d = format!("M {x1} {y1} C {x1} {mid_y}, {x2} {mid_y}, {x2} {y2}");
-                    view! { <path d=d fill="none" stroke=theme.edge_color stroke-width="1.5" /> }
-                })
+                        let [x1, y1, x2, y2, mid] = edge_anchors(from, to, orientation);
+                        let d = match orientation {
+                            Orientation::Vertical => {
+                                format!("M {x1} {y1} C {x1} {mid}, {x2} {mid}, {x2} {y2}")
+                            }
+                            Orientation::Horizontal => {
+                                format!("M {x1} {y1} C {mid} {y1}, {mid} {y2}, {x2} {y2}")
+                            }
+                        };
+                        view! { <path d=d fill="none" stroke=theme.edge_color stroke-width="1.5" /> }
+                    })
                 })
         })
         .collect::<Vec<_>>()

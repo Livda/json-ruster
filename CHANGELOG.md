@@ -4,6 +4,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.5] - Rotate the graph 90°
+
+### Added
+- A "↻" button on the graph panel toggles between the default top-to-bottom tree layout and a left-to-right one (`layout::Orientation`), like JSON Crack's rotate control. Applies to the interactive view and to SVG/PNG export alike.
+
 ## [0.11.4] - CI/coverage badges
 
 ### Added

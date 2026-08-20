@@ -137,6 +137,52 @@ async fn theme_toggle_changes_the_page_background() {
 }
 
 #[wasm_bindgen_test]
+async fn rotate_button_toggles_the_graph_orientation() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    let textarea: web_sys::HtmlTextAreaElement = container
+        .query_selector("textarea")
+        .unwrap()
+        .expect("editor textarea should be rendered")
+        .unchecked_into();
+    textarea.set_value(r#"{"a": {"b": 1}}"#);
+    dispatch(&textarea, "input");
+    tick().await;
+
+    // The edge path's `d` attribute encodes both endpoints and which axis
+    // the bezier control points bulge along, so it differs between a
+    // top-to-bottom and a left-to-right layout of the same tree.
+    let edge_before: web_sys::Element = container
+        .query_selector("path")
+        .unwrap()
+        .expect("an edge path should be rendered for a nested document");
+    let d_before = edge_before.get_attribute("d");
+
+    let rotate: web_sys::HtmlElement = container
+        .query_selector("button[title='Rotate 90°']")
+        .unwrap()
+        .expect("rotate button should be rendered")
+        .unchecked_into();
+    rotate.click();
+    tick().await;
+
+    let edge_after: web_sys::Element = container
+        .query_selector("path")
+        .unwrap()
+        .expect("the edge path should still be rendered after rotating");
+    let d_after = edge_after.get_attribute("d");
+
+    assert!(container.query_selector("svg").unwrap().is_some());
+    assert_ne!(
+        d_before, d_after,
+        "rotating should change the edge's path geometry"
+    );
+
+    container.remove();
+}
+
+#[wasm_bindgen_test]
 async fn fullscreen_buttons_are_rendered_and_clickable() {
     let (container, _handle) = mount_app();
     tick().await;

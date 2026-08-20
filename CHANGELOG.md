@@ -7,7 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 ## [0.7.0] - Milestone 7 — GitHub Actions CI
 
 ### Added
-- `.github/workflows/ci.yml` with jobs `fmt`/`clippy` (lint), `test` (`cargo test --lib`), `build-wasm` (`trunk build --release`, uploaded as an artifact), and `docker` (build and push the production image to GHCR at `ghcr.io/<repo>`, tagged with the commit SHA and `latest`, on pushes to `main`).
+- `.github/workflows/ci.yml` with jobs `fmt`/`clippy` (lint), `test` (`cargo test --lib`), `build-wasm` (`trunk build --release`, uploaded as an artifact), and `docker` (`docker build` to validate the `Dockerfile`, not pushed anywhere).
 - Cargo build cache via `Swatinem/rust-cache` shared across the clippy/test/build-wasm jobs.
 
 ### Fixed
@@ -15,7 +15,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ### Notes
 - A GitLab CI pipeline was set up first and then replaced with this GitHub Actions one at the user's request.
-- The `docker` job's push step could not be exercised here (no GitHub Actions runner in this environment); `docker build`, `cargo fmt --check`, `cargo clippy -- -D warnings` and `cargo test --lib` were all run and verified locally. The push relies on the repo's built-in `GITHUB_TOKEN` and the GitHub Container Registry, both available by default with no extra secrets to configure.
+- The `docker` job only builds the image locally in the runner to catch a broken `Dockerfile`; it does not push to any registry (no `docker/login-action`, no credentials needed).
 ## [0.6.0] - Milestone 6 — Docker
 
 ### Added

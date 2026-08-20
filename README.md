@@ -45,7 +45,7 @@ cargo test --lib
 
 ## CI
 
-`.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` (test), `trunk build --release` (build, uploaded as an artifact), then `docker build`/`push` to GHCR (`ghcr.io/<owner>/<repo>`) on pushes to `main` (uses the repo's built-in `GITHUB_TOKEN`, no extra setup needed).
+`.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` (test), `trunk build --release` (build, uploaded as an artifact), then a `docker build` to validate the `Dockerfile` still builds (not pushed anywhere).
 
 ## Architecture
 
@@ -77,4 +77,4 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed progress.
 4. **Conversion & export** — format conversion, SVG export, PNG export. ✅
 5. **Stretch** — light/dark theme ✅, search ✅, syntax-highlighting editor (not planned: would need a JS dependency like CodeMirror, out of scope for a pure-Rust/WASM app).
 6. **Docker** — multi-stage `Dockerfile` (Trunk build + nginx runtime) for a production image, plus `compose.yaml`. ✅
-7. **CI** — GitHub Actions pipeline: lint (fmt/clippy), test, build (Trunk), build & push a production Docker image to GHCR. ✅
+7. **CI** — GitHub Actions pipeline: lint (fmt/clippy), test, build (Trunk), validate the Docker image builds. ✅

@@ -4,6 +4,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.12.0] - Visual refresh
+
+### Added
+- A legend at the bottom of the graph panel explaining the value-type colors (string/number/boolean/null/search match), which were otherwise unexplained.
+
+### Changed
+- New palette: softer, less pure-black/white surfaces (`page_bg`/`toolbar_bg`/`node_bg`), lower-contrast borders, and the existing selection amber promoted to the one accent color (buttons stay neutral).
+- IBM Plex Sans for toolbar chrome, IBM Plex Mono for the editor and node text, replacing the system monospace/sans-serif defaults.
+- The top toolbar's controls are grouped into rounded pill clusters (e.g. "Format" + "Load sample") instead of separated by plain `"|"` text dividers.
+- The graph panel's floating toolbar and node boxes gained rounded corners and a soft shadow instead of flat 1px borders; buttons/selects/inputs get a hover/focus-visible state via a small `index.html` stylesheet reading `--rk-*` custom properties the app sets per theme (inline styles can't express pseudo-classes).
+
 ## [0.11.9] - Zoom to fit, search navigation
 
 ### Added

@@ -5,8 +5,31 @@
     <title>json-ruster</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦀</text></svg>" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
     <style>
       html, body { margin: 0; padding: 0; }
+      /* Hover/focus states live here rather than as inline styles (which
+         can't express pseudo-classes): buttons/selects/inputs read their
+         colors from --rk-* custom properties the app sets on its root
+         element for the active theme, so this stylesheet doesn't need to
+         know about light vs dark itself. */
+      .rk-btn, .rk-select, .rk-input {
+        font-family: 'IBM Plex Sans', system-ui, sans-serif;
+      }
+      .rk-btn:hover {
+        background: var(--rk-surface-raised);
+      }
+      .rk-btn:focus-visible,
+      .rk-select:focus-visible,
+      .rk-input:focus-visible {
+        outline: 2px solid var(--rk-accent);
+        outline-offset: 1px;
+      }
     </style>
     <link data-trunk rel="rust" data-wasm-opt="z" />
   </head>

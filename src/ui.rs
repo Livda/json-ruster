@@ -32,50 +32,61 @@ pub struct Theme {
     pub value_number: &'static str,
     pub value_bool: &'static str,
     pub value_null: &'static str,
+    /// Background for a group of related toolbar controls (e.g. "Format" +
+    /// "Load sample"), one step lighter/darker than `toolbar_bg` so the
+    /// grouping reads without a text separator between unrelated controls.
+    pub surface_raised: &'static str,
+    /// `box-shadow` value giving panels/floating toolbars depth instead of
+    /// a flat 1px border.
+    pub shadow: &'static str,
 }
 
 impl Theme {
     pub fn dark() -> Self {
         Theme {
-            page_bg: "#0f1117",
-            toolbar_bg: "#1a202c",
-            toolbar_border: "#2d3748",
-            toolbar_text: "#a0aec0",
-            graph_bg: "#0f1117",
-            node_bg: "#1a202c",
-            node_border: "#4a5568",
-            node_border_selected: "#f6ad55",
+            page_bg: "#0d0f14",
+            toolbar_bg: "#161922",
+            toolbar_border: "#2a2f3d",
+            toolbar_text: "#8890a4",
+            graph_bg: "#0d0f14",
+            node_bg: "#161922",
+            node_border: "#2a2f3d",
+            node_border_selected: "#f2a154",
             node_border_match: "#ecc94b",
-            edge_color: "#4a5568",
-            title_color: "#63b3ed",
-            text_color: "#e2e8f0",
+            edge_color: "#2a2f3d",
+            title_color: "#e7e9f0",
+            text_color: "#e7e9f0",
             error_color: "#ff6b6b",
             value_string: "#68d391",
             value_number: "#f6ad55",
             value_bool: "#f687b3",
             value_null: "#a0aec0",
+            surface_raised: "#1e2230",
+            shadow: "0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.35)",
         }
     }
 
     pub fn light() -> Self {
         Theme {
-            page_bg: "#ffffff",
-            toolbar_bg: "#f1f5f9",
-            toolbar_border: "#cbd5e0",
-            toolbar_text: "#4a5568",
-            graph_bg: "#f8fafc",
+            page_bg: "#f7f7fa",
+            toolbar_bg: "#ffffff",
+            toolbar_border: "#dde0e8",
+            toolbar_text: "#5b6070",
+            graph_bg: "#f7f7fa",
             node_bg: "#ffffff",
-            node_border: "#94a3b8",
-            node_border_selected: "#dd6b20",
+            node_border: "#dde0e8",
+            node_border_selected: "#c9791f",
             node_border_match: "#b7791f",
-            edge_color: "#94a3b8",
-            title_color: "#2b6cb0",
-            text_color: "#1a202c",
+            edge_color: "#dde0e8",
+            title_color: "#1a1d29",
+            text_color: "#1a1d29",
             error_color: "#c53030",
             value_string: "#2f855a",
             value_number: "#c05621",
             value_bool: "#b83280",
             value_null: "#718096",
+            surface_raised: "#eef0f4",
+            shadow: "0 1px 2px rgba(20, 22, 30, 0.06), 0 4px 14px rgba(20, 22, 30, 0.07)",
         }
     }
 }
@@ -172,12 +183,54 @@ fn fit_view(
 
 /// Inline style shared by `<select>`/`<button>`/`<input>` toolbar controls,
 /// which otherwise keep the browser's default white background regardless
-/// of theme.
+/// of theme. Hover/focus states can't be expressed inline, so callers also
+/// add the `rk-btn`/`rk-select`/`rk-input` class (see `index.html`) for
+/// those; this only carries per-theme colors plus static layout.
 pub fn control_style(theme: Theme) -> String {
     format!(
-        "background:{}; color:{}; border:1px solid {}; border-radius:4px; padding:2px 6px; font-size:13px;",
+        "background:{}; color:{}; border:1px solid {}; border-radius:7px; padding:5px 11px; font-size:12.5px; cursor:pointer;",
         theme.node_bg, theme.text_color, theme.toolbar_border
     )
+}
+
+/// Inline style for a pill grouping related toolbar controls (e.g. "Format"
+/// and "Load sample"), replacing a plain text `"|"` separator between
+/// unrelated ones.
+pub fn cluster_style(theme: Theme) -> String {
+    format!(
+        "display:flex; align-items:center; gap:6px; background:{}; border:1px solid {}; border-radius:10px; padding:4px;",
+        theme.surface_raised, theme.toolbar_border
+    )
+}
+
+fn legend_item(color: &'static str, label: &'static str) -> impl IntoView {
+    view! {
+        <span style="display:flex; align-items:center; gap:5px;">
+            <span style=format!("width:8px; height:8px; border-radius:50%; background:{color}; display:inline-block;")></span>
+            {label}
+        </span>
+    }
+}
+
+/// Small key showing what each value color in the graph means, since
+/// they're otherwise unexplained (the node text alone doesn't say "this
+/// green is a string").
+fn legend(theme: Theme) -> impl IntoView {
+    view! {
+        <div style=move || format!(
+            "position:absolute; bottom:10px; left:10px; display:flex; gap:14px; align-items:center; \
+             padding:6px 12px; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:11px; \
+             color:{}; background:{}; border:1px solid {}; border-radius:10px; box-shadow:{}; \
+             pointer-events:none; z-index:1;",
+            theme.toolbar_text, theme.toolbar_bg, theme.toolbar_border, theme.shadow
+        )>
+            {legend_item(theme.value_string, "string")}
+            {legend_item(theme.value_number, "number")}
+            {legend_item(theme.value_bool, "boolean")}
+            {legend_item(theme.value_null, "null")}
+            {legend_item(theme.node_border_match, "search match")}
+        </div>
+    }
 }
 
 /// Nodes whose title or a field's key/value contains `query`
@@ -464,7 +517,7 @@ fn render_static_svg(
         let node = &graph.nodes[id];
         let pos = positions[&id];
         svg.push_str(&format!(
-            "<g transform=\"translate({}, {})\">\n<rect width=\"{}\" height=\"{}\" rx=\"6\" fill=\"{}\" stroke=\"{}\" stroke-width=\"1.5\" />\n",
+            "<g transform=\"translate({}, {})\">\n<rect width=\"{}\" height=\"{}\" rx=\"8\" fill=\"{}\" stroke=\"{}\" stroke-width=\"1.5\" />\n",
             pos.x, pos.y, pos.width, pos.height, theme.node_bg, theme.node_border
         ));
 
@@ -476,7 +529,7 @@ fn render_static_svg(
         for (i, line) in title_lines.iter().enumerate() {
             let y = 16.0 + i as f64 * LINE_HEIGHT;
             svg.push_str(&format!(
-                "<text x=\"10\" y=\"{y}\" fill=\"{}\" font-size=\"12\" font-family=\"monospace\" font-weight=\"bold\">{}</text>\n",
+                "<text x=\"10\" y=\"{y}\" fill=\"{}\" font-size=\"12\" font-family=\"'IBM Plex Mono', ui-monospace, monospace\" font-weight=\"bold\">{}</text>\n",
                 theme.title_color,
                 escape_xml_text(line)
             ));
@@ -493,7 +546,7 @@ fn render_static_svg(
             };
             for line in &lines {
                 svg.push_str(&format!(
-                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"{color}\" font-size=\"12\" font-family=\"monospace\">{}</text>\n",
+                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"{color}\" font-size=\"12\" font-family=\"'IBM Plex Mono', ui-monospace, monospace\">{}</text>\n",
                     escape_xml_text(line)
                 ));
                 y_cursor += LINE_HEIGHT;
@@ -627,14 +680,17 @@ pub fn App() -> impl IntoView {
 
     view! {
         <div style=move || format!(
-            "display:flex; flex-direction:column; height:100vh; width:100vw; font-family: sans-serif; background:{};",
-            theme().page_bg
+            "display:flex; flex-direction:column; height:100vh; width:100vw; \
+             font-family:'IBM Plex Sans', system-ui, sans-serif; background:{}; \
+             --rk-surface-raised:{}; --rk-accent:{};",
+            theme().page_bg, theme().surface_raised, theme().node_border_selected
         )>
             <div style=move || format!(
-                "position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:6px; padding:6px 44px 6px 10px; background:{}; border-bottom:1px solid {};",
+                "position:relative; display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:8px 44px 8px 10px; background:{}; border-bottom:1px solid {};",
                 theme().toolbar_bg, theme().toolbar_border
             )>
                 <button
+                    class="rk-btn"
                     title="Toggle theme"
                     on:click=move |_| set_is_dark.update(|d| *d = !*d)
                     style=move || format!(
@@ -647,63 +703,67 @@ pub fn App() -> impl IntoView {
                 >
                     {move || if is_dark.get() { "\u{1F319}" } else { "\u{2600}\u{FE0F}" }}
                 </button>
-                <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Format"</label>
-                <select style=move || control_style(theme()) on:change=on_format_change>
-                    {Format::ALL
-                        .iter()
-                        .map(|f| view! { <option value=f.label()>{f.label()}</option> })
-                        .collect::<Vec<_>>()}
-                </select>
-                <button
-                    style=move || control_style(theme())
-                    on:click=on_load_sample_click
-                    title="Replace the editor content with a sample of the selected format"
-                >
-                    "Load sample"
-                </button>
+                <div style=move || cluster_style(theme())>
+                    <label style=move || format!("color:{}; font-size:11.5px; padding-left:4px;", theme().toolbar_text)>"Format"</label>
+                    <select class="rk-select" style=move || control_style(theme()) on:change=on_format_change>
+                        {Format::ALL
+                            .iter()
+                            .map(|f| view! { <option value=f.label()>{f.label()}</option> })
+                            .collect::<Vec<_>>()}
+                    </select>
+                    <button
+                        class="rk-btn"
+                        style=move || control_style(theme())
+                        on:click=on_load_sample_click
+                        title="Replace the editor content with a sample of the selected format"
+                    >
+                        "Load sample"
+                    </button>
+                </div>
 
-                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
+                <div style=move || cluster_style(theme())>
+                    <label style=move || format!("color:{}; font-size:11.5px; padding-left:4px;", theme().toolbar_text)>"Convert to"</label>
+                    <select class="rk-select" style=move || control_style(theme()) on:change=on_convert_target_change>
+                        {Format::ALL
+                            .iter()
+                            .map(|f| view! { <option value=f.label()>{f.label()}</option> })
+                            .collect::<Vec<_>>()}
+                    </select>
+                    <button class="rk-btn" style=move || control_style(theme()) on:click=on_convert_click>"Convert"</button>
+                </div>
 
-                <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Convert to"</label>
-                <select style=move || control_style(theme()) on:change=on_convert_target_change>
-                    {Format::ALL
-                        .iter()
-                        .map(|f| view! { <option value=f.label()>{f.label()}</option> })
-                        .collect::<Vec<_>>()}
-                </select>
-                <button style=move || control_style(theme()) on:click=on_convert_click>"Convert"</button>
+                <div style=move || cluster_style(theme())>
+                    <button class="rk-btn" style=move || control_style(theme()) on:click=on_copy_click>
+                        {move || if copied.get() { "Copied!" } else { "Copy" }}
+                    </button>
+                    <button class="rk-btn" style=move || control_style(theme()) on:click=on_share_click title="Copy a shareable link to this document">
+                        {move || if share_copied.get() { "Link copied!" } else { "Share" }}
+                    </button>
+                </div>
 
-                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
-
-                <button style=move || control_style(theme()) on:click=on_copy_click>
-                    {move || if copied.get() { "Copied!" } else { "Copy" }}
-                </button>
-                <button style=move || control_style(theme()) on:click=on_share_click title="Copy a shareable link to this document">
-                    {move || if share_copied.get() { "Link copied!" } else { "Share" }}
-                </button>
-
-                <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
-
-                <label style=move || format!("color:{}; font-size:13px;", theme().toolbar_text)>"Search"</label>
-                <input
-                    type="text"
-                    placeholder="key or value..."
-                    style=move || control_style(theme())
-                    prop:value=move || search_input.get()
-                    on:input=move |ev| {
-                        let value = event_target_value(&ev);
-                        set_search_input.set(value.clone());
-                        if let Some(handle) = search_debounce.get_value() {
-                            handle.clear();
+                <div style=move || cluster_style(theme())>
+                    <label style=move || format!("color:{}; font-size:11.5px; padding-left:4px;", theme().toolbar_text)>"Search"</label>
+                    <input
+                        class="rk-input"
+                        type="text"
+                        placeholder="key or value..."
+                        style=move || control_style(theme())
+                        prop:value=move || search_input.get()
+                        on:input=move |ev| {
+                            let value = event_target_value(&ev);
+                            set_search_input.set(value.clone());
+                            if let Some(handle) = search_debounce.get_value() {
+                                handle.clear();
+                            }
+                            let handle = set_timeout_with_handle(
+                                move || set_search.set(value),
+                                std::time::Duration::from_millis(200),
+                            )
+                            .ok();
+                            search_debounce.set_value(handle);
                         }
-                        let handle = set_timeout_with_handle(
-                            move || set_search.set(value),
-                            std::time::Duration::from_millis(200),
-                        )
-                        .ok();
-                        search_debounce.set_value(handle);
-                    }
-                />
+                    />
+                </div>
 
                 {move || convert_error.get().map(|e| {
                     let color = theme().error_color;
@@ -722,7 +782,7 @@ pub fn App() -> impl IntoView {
                 <div node_ref=editor_ref style="position:relative; width:40%; height:100%;">
                     <textarea
                         style=move || format!(
-                            "width:100%; height:100%; box-sizing:border-box; font-family: monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
+                            "width:100%; height:100%; box-sizing:border-box; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
                             theme().toolbar_border, theme().node_bg, theme().text_color
                         )
                         prop:value=move || input.get()
@@ -732,6 +792,7 @@ pub fn App() -> impl IntoView {
                         }
                     />
                     <button
+                        class="rk-btn"
                         title="Toggle fullscreen"
                         on:click=move |_| {
                             if let Some(el) = editor_ref.get() {
@@ -739,10 +800,10 @@ pub fn App() -> impl IntoView {
                             }
                         }
                         style=move || format!(
-                            "position:absolute; top:8px; right:8px; border:1px solid {}; \
-                             background:{}cc; color:{}; border-radius:4px; padding:2px 6px; \
-                             font-size:12px; cursor:pointer;",
-                            theme().toolbar_border, theme().node_bg, theme().text_color
+                            "position:absolute; top:10px; right:10px; border:1px solid {}; \
+                             background:{}; color:{}; border-radius:8px; padding:5px 8px; \
+                             font-size:13px; cursor:pointer; box-shadow:{};",
+                            theme().toolbar_border, theme().node_bg, theme().text_color, theme().shadow
                         )
                     >
                         "⛶"
@@ -1021,8 +1082,8 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
             on:wheel=on_wheel
         >
             <div style=move || format!(
-                "position:absolute; top:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:6px 10px; font-family:monospace; font-size:12px; color:{}; background:{}cc; z-index:1;",
-                theme.toolbar_text, theme.toolbar_bg
+                "position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 10px; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:12px; color:{}; background:{}; border:1px solid {}; border-radius:10px; box-shadow:{}; z-index:1;",
+                theme.toolbar_text, theme.toolbar_bg, theme.toolbar_border, theme.shadow
             )>
                 <span style="pointer-events:none;">
                     {move || {
@@ -1039,16 +1100,17 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                             .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
                     }}
                 </span>
-                <span>
+                <span style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                     {move || {
                         (!matches_sorted.get().is_empty()).then(|| view! {
                             <>
-                                <button title="Previous match" style=control_style(theme) on:click=on_prev_match>"◀"</button>
-                                <button title="Next match" style=control_style(theme) on:click=on_next_match>"▶"</button>
+                                <button class="rk-btn" title="Previous match" style=control_style(theme) on:click=on_prev_match>"◀"</button>
+                                <button class="rk-btn" title="Next match" style=control_style(theme) on:click=on_next_match>"▶"</button>
                             </>
                         })
                     }}
                     <button
+                        class="rk-btn"
                         title="Toggle fullscreen"
                         style=control_style(theme)
                         on:click=move |_| {
@@ -1060,6 +1122,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                         "⛶"
                     </button>
                     <button
+                        class="rk-btn"
                         title="Rotate 90°"
                         style=control_style(theme)
                         on:click=move |_| {
@@ -1069,11 +1132,11 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     >
                         "↻"
                     </button>
-                    <button style=control_style(theme) on:click=on_expand_all>"Expand all"</button>
-                    <button style=control_style(theme) on:click=on_collapse_all>"Collapse all"</button>
-                    <button title="Zoom to fit the whole graph" style=control_style(theme) on:click=on_zoom_to_fit>"Fit"</button>
-                    <button style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
-                    <button style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
+                    <button class="rk-btn" style=control_style(theme) on:click=on_expand_all>"Expand all"</button>
+                    <button class="rk-btn" style=control_style(theme) on:click=on_collapse_all>"Collapse all"</button>
+                    <button class="rk-btn" title="Zoom to fit the whole graph" style=control_style(theme) on:click=on_zoom_to_fit>"Fit"</button>
+                    <button class="rk-btn" style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
+                    <button class="rk-btn" style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>
             </div>
             <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
@@ -1111,6 +1174,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     }}
                 </g>
             </svg>
+            {legend(theme)}
         </div>
     }
 }
@@ -1196,7 +1260,7 @@ fn truncatable_lines(
                 let y = start_y + i as f64 * LINE_HEIGHT;
                 let is_last = i + 1 == count;
                 view! {
-                    <text x=x y=y.to_string() fill=color font-size="12" font-family="monospace" font-weight=weight>
+                    <text x=x y=y.to_string() fill=color font-size="12" font-family="'IBM Plex Mono', ui-monospace, monospace" font-weight=weight>
                         {line}
                         {is_last.then(|| view! {
                             <tspan
@@ -1219,7 +1283,7 @@ fn truncatable_lines(
     } else {
         let (display, truncated) = truncate_display(&full);
         let view = view! {
-            <text x=x y=start_y.to_string() fill=color font-size="12" font-family="monospace" font-weight=weight>
+            <text x=x y=start_y.to_string() fill=color font-size="12" font-family="'IBM Plex Mono', ui-monospace, monospace" font-weight=weight>
                 {display}
                 {truncated.then(|| view! {
                     <tspan
@@ -1330,14 +1394,14 @@ fn render_nodes(
                     <rect
                         width=pos.width
                         height=pos.height
-                        rx="6"
+                        rx="8"
                         fill=theme.node_bg
                         stroke=stroke
                         stroke-width=stroke_width
                     />
                     {title_views}
                     {(!marker.is_empty()).then(|| view! {
-                        <text x=marker_x y="16" fill=theme.toolbar_text font-size="11" font-family="monospace">{marker}</text>
+                        <text x=marker_x y="16" fill=theme.toolbar_text font-size="11" font-family="'IBM Plex Mono', ui-monospace, monospace">{marker}</text>
                     })}
                     {field_views}
                 </g>

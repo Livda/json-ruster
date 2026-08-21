@@ -136,6 +136,42 @@ async fn theme_toggle_changes_the_page_background() {
     container.remove();
 }
 
+fn button_with_text(container: &web_sys::Element, text: &str) -> web_sys::HtmlElement {
+    let buttons = container.query_selector_all("button").unwrap();
+    (0..buttons.length())
+        .map(|i| buttons.get(i).unwrap())
+        .find(|b| b.text_content().as_deref() == Some(text))
+        .unwrap_or_else(|| panic!("no button with text {text:?}"))
+        .unchecked_into()
+}
+
+#[wasm_bindgen_test]
+async fn expand_all_and_collapse_all_toggle_every_node() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    let textarea: web_sys::HtmlTextAreaElement = container
+        .query_selector("textarea")
+        .unwrap()
+        .expect("editor textarea should be rendered")
+        .unchecked_into();
+    textarea.set_value(r#"{"a": {"b": 1}}"#);
+    dispatch(&textarea, "input");
+    tick().await;
+
+    assert_eq!(container.query_selector_all("rect").unwrap().length(), 2);
+
+    button_with_text(&container, "Collapse all").click();
+    tick().await;
+    assert_eq!(container.query_selector_all("rect").unwrap().length(), 1);
+
+    button_with_text(&container, "Expand all").click();
+    tick().await;
+    assert_eq!(container.query_selector_all("rect").unwrap().length(), 2);
+
+    container.remove();
+}
+
 #[wasm_bindgen_test]
 async fn rotate_button_toggles_the_graph_orientation() {
     let (container, _handle) = mount_app();

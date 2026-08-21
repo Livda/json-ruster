@@ -4,6 +4,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.6] - Expand/collapse all, value type coloring
+
+### Added
+- "Expand all"/"Collapse all" buttons in the graph toolbar, resetting every node's collapse state at once.
+- Field values are colored by inferred type (string/number/boolean/null, via `convert::infer_scalar`) instead of a single default text color, in both the interactive view and SVG/PNG export.
+
 ## [0.11.5] - Rotate the graph 90°
 
 ### Added

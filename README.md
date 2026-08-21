@@ -87,6 +87,8 @@ docker compose --profile test run --rm test
 - **Share**: copies a link that reopens with the same document and format, encoded in the URL fragment (nothing is sent to a server) as DEFLATE-compressed, base64 text. Refused with an error instead of producing an unusable link if the compressed payload would exceed 8 KB.
 - **Fullscreen**: the "⛶" button on the editor or the graph panel (top-right of each) toggles fullscreen for that panel independently.
 - **Rotate**: the "↻" button (top-right of the graph panel) turns the tree 90° between the default top-to-bottom layout and a left-to-right one.
+- **Expand all / Collapse all**: buttons in the graph panel to reset every node's collapse state at once, instead of one node at a time.
+- **Value coloring**: field values are colored by inferred type (string/number/boolean/null), independent of the theme's default text color.
 
 The current document, format and theme are saved to `localStorage`, so reloading the page picks up where you left off (a share link, if present in the URL, takes priority).
 

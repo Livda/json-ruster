@@ -15,7 +15,7 @@ pub fn convert(data: &DataNode, target: Format) -> Result<String, String> {
 /// its original type), so round-tripping to a typed format re-infers
 /// numbers/booleans/null from the text instead of quoting everything as a
 /// string.
-enum Scalar {
+pub(crate) enum Scalar {
     Int(i64),
     Float(f64),
     Bool(bool),
@@ -23,7 +23,7 @@ enum Scalar {
     Text(String),
 }
 
-fn infer_scalar(s: &str) -> Scalar {
+pub(crate) fn infer_scalar(s: &str) -> Scalar {
     if s == "null" {
         Scalar::Null
     } else if let Ok(b) = s.parse::<bool>() {

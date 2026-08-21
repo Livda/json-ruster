@@ -28,6 +28,10 @@ pub struct Theme {
     pub title_color: &'static str,
     pub text_color: &'static str,
     pub error_color: &'static str,
+    pub value_string: &'static str,
+    pub value_number: &'static str,
+    pub value_bool: &'static str,
+    pub value_null: &'static str,
 }
 
 impl Theme {
@@ -46,6 +50,10 @@ impl Theme {
             title_color: "#63b3ed",
             text_color: "#e2e8f0",
             error_color: "#ff6b6b",
+            value_string: "#68d391",
+            value_number: "#f6ad55",
+            value_bool: "#f687b3",
+            value_null: "#a0aec0",
         }
     }
 
@@ -64,7 +72,23 @@ impl Theme {
             title_color: "#2b6cb0",
             text_color: "#1a202c",
             error_color: "#c53030",
+            value_string: "#2f855a",
+            value_number: "#c05621",
+            value_bool: "#b83280",
+            value_null: "#718096",
         }
+    }
+}
+
+/// Color a field value gets in the graph, based on its inferred type
+/// (mirrors `convert::infer_scalar`'s number/bool/null detection so the
+/// same text round-trips to the same "kind" everywhere in the app).
+fn value_type_color(theme: Theme, raw: &str) -> &'static str {
+    match convert::infer_scalar(raw) {
+        convert::Scalar::Int(_) | convert::Scalar::Float(_) => theme.value_number,
+        convert::Scalar::Bool(_) => theme.value_bool,
+        convert::Scalar::Null => theme.value_null,
+        convert::Scalar::Text(_) => theme.value_string,
     }
 }
 
@@ -383,6 +407,7 @@ fn render_static_svg(
         let mut y_cursor = 30.0 + (title_lines.len() as f64 - 1.0) * LINE_HEIGHT;
         for (i, (k, v)) in node.fields.iter().enumerate() {
             let full = field_full_text(k, v);
+            let color = value_type_color(theme, v);
             let lines = if expanded.contains(&(id, FieldRef::Field(i))) {
                 wrap_text(&full)
             } else {
@@ -390,8 +415,7 @@ fn render_static_svg(
             };
             for line in &lines {
                 svg.push_str(&format!(
-                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"{}\" font-size=\"12\" font-family=\"monospace\">{}</text>\n",
-                    theme.text_color,
+                    "<text x=\"10\" y=\"{y_cursor}\" fill=\"{color}\" font-size=\"12\" font-family=\"monospace\">{}</text>\n",
                     escape_xml_text(line)
                 ));
                 y_cursor += LINE_HEIGHT;
@@ -751,6 +775,17 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         }
     };
     let select = move |id: usize| set_selected.set(Some(id));
+    let on_expand_all = move |_: MouseEvent| set_collapsed.set(HashSet::new());
+    let on_collapse_all = move |_: MouseEvent| {
+        let all = graph.with_value(|g| {
+            g.nodes
+                .iter()
+                .filter(|n| !n.children.is_empty())
+                .map(|n| n.id)
+                .collect()
+        });
+        set_collapsed.set(all);
+    };
     let toggle_expand = move |key: (usize, FieldRef)| {
         set_expanded.update(|set| {
             if !set.remove(&key) {
@@ -823,6 +858,8 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     >
                         "↻"
                     </button>
+                    <button style=control_style(theme) on:click=on_expand_all>"Expand all"</button>
+                    <button style=control_style(theme) on:click=on_collapse_all>"Collapse all"</button>
                     <button style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
                     <button style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>
@@ -1043,7 +1080,7 @@ fn render_nodes(
                 let (views, count) = truncatable_lines(
                     "10",
                     y_cursor,
-                    theme.text_color,
+                    value_type_color(theme, v),
                     theme.title_color,
                     None,
                     full,
@@ -1101,6 +1138,16 @@ fn render_nodes(
 mod tests {
     use super::*;
     use crate::model::DataNode;
+
+    #[test]
+    fn value_type_color_distinguishes_number_bool_null_and_string() {
+        let theme = Theme::dark();
+        assert_eq!(value_type_color(theme, "42"), theme.value_number);
+        assert_eq!(value_type_color(theme, "3.14"), theme.value_number);
+        assert_eq!(value_type_color(theme, "true"), theme.value_bool);
+        assert_eq!(value_type_color(theme, "null"), theme.value_null);
+        assert_eq!(value_type_color(theme, "hello"), theme.value_string);
+    }
 
     #[test]
     fn find_matches_is_case_insensitive_on_keys_and_values() {

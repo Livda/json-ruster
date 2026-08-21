@@ -65,7 +65,7 @@ docker compose --profile test run --rm test
 
 `.github/workflows/ci.yml` runs on GitHub Actions: `fmt`/`clippy` (lint), `cargo test --lib` plus `cargo-llvm-cov` (test + coverage -- a per-file table is written to the run's Summary tab, and `lcov.info` is uploaded as an artifact), `trunk build --release` (build, uploaded as an artifact), then a `docker build` to validate the `Dockerfile` still builds (not pushed anywhere). The browser-driven `tests/ui.rs` suite isn't wired into CI yet (it only runs locally via the `chromedriver`/`test` services) -- it would need chromedriver + chromium on the runner.
 
-On every push to `main`, `deploy-pages` rebuilds with `trunk build --release --public-url /json-ruster/` (GitHub Pages serves a project site under `/<repo>/`, not the domain root -- this override only applies to that build, so local dev and the Docker image are unaffected) and publishes `dist/` via `actions/deploy-pages`, live at <https://livda.github.io/json-ruster/>. Requires the repo's Settings → Pages → "Build and deployment" source set to "GitHub Actions" (one-time, repo-admin only).
+That build is done with `--public-url /json-ruster/` baked in (GitHub Pages serves a project site under `/<repo>/`, not the domain root -- the Docker image isn't affected, it builds its own copy in the `Dockerfile`'s `builder` stage without that flag). On every push to `main`, `deploy-pages` downloads that same artifact (no rebuild) and publishes it via `actions/deploy-pages`, live at <https://livda.github.io/json-ruster/>. Requires the repo's Settings → Pages → "Build and deployment" source set to "GitHub Actions" (one-time, repo-admin only).
 
 ## Architecture
 

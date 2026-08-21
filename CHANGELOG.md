@@ -4,6 +4,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.12.4] - Fix Pages deploy to reuse the existing build
+
+### Fixed
+- `deploy-pages` rebuilt the whole project from scratch instead of reusing `build-wasm`'s output. `build-wasm` now bakes in `--public-url /json-ruster/` directly, and `deploy-pages` just downloads that artifact (`actions/download-artifact`) instead of checking out and recompiling.
+- Re-running only the failed `deploy-pages` job left a stale duplicate `github-pages` artifact from the earlier attempt, which made `actions/deploy-pages` fail with "Multiple artifacts named github-pages were unexpectedly found" -- use "Re-run all jobs" (or a fresh push) instead of "Re-run failed jobs" for this workflow.
+
 ## [0.12.3] - Deploy to GitHub Pages
 
 ### Added

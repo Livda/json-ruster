@@ -77,7 +77,10 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2.9.2
       - run: cargo install trunk --locked
-      - run: trunk build --release
+      # GitHub Pages serves a project site under /<repo>/, not the domain
+      # root, so this is built with that path baked in -- deploy-pages
+      # reuses this exact artifact instead of rebuilding from scratch.
+      - run: trunk build --release --public-url /json-ruster/
       - uses: actions/upload-artifact@v7
         with:
           name: dist
@@ -106,17 +109,10 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@1.93.1
+      - uses: actions/download-artifact@v8
         with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2.9.2
-      - run: cargo install trunk --locked
-      # GitHub Pages serves a project site under /<repo>/, not the domain
-      # root -- override the public URL only for this build so local dev
-      # and the Docker image (served at whatever root the user maps it to)
-      # are unaffected.
-      - run: trunk build --release --public-url /json-ruster/
+          name: dist
+          path: dist
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

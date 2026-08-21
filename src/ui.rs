@@ -495,12 +495,20 @@ pub fn App() -> impl IntoView {
 
     let parsed = Memo::new(move |_| parsers::parse(format.get(), &input.get()));
 
+    // Only changes which parser is used for the *current* text -- it used
+    // to also replace the editor content with a sample, which made it look
+    // like a second "convert" control next to the actual one below.
     let on_format_change = move |ev| {
         if let Some(new_format) = Format::from_label(&event_target_value(&ev)) {
             set_format.set(new_format);
-            set_input.set(new_format.sample().to_string());
             set_convert_error.set(None);
         }
+    };
+
+    let on_load_sample_click = move |_| {
+        let f = format.get_untracked();
+        set_input.set(f.sample().to_string());
+        set_convert_error.set(None);
     };
 
     let on_convert_target_change = move |ev| {
@@ -589,6 +597,13 @@ pub fn App() -> impl IntoView {
                         .map(|f| view! { <option value=f.label()>{f.label()}</option> })
                         .collect::<Vec<_>>()}
                 </select>
+                <button
+                    style=move || control_style(theme())
+                    on:click=on_load_sample_click
+                    title="Replace the editor content with a sample of the selected format"
+                >
+                    "Load sample"
+                </button>
 
                 <span style=move || format!("color:{}; margin:0 4px;", theme().toolbar_border)>"|"</span>
 

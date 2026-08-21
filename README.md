@@ -79,7 +79,8 @@ docker compose --profile test run --rm test
 - **Zoom**: mouse wheel.
 - **Collapse/expand**: click a node with children (`+N`/`-` indicator); the click also selects the node and shows its path at the top of the panel.
 - **Long values**: click the `[...]` marker to expand a truncated line in place (`[-]` to collapse it back).
-- **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format.
+- **Format**: which parser reads the editor's current text -- switching it doesn't touch the content, only how it's interpreted. Use "Load sample" to fill the editor with an example of the selected format.
+- **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format (the only control that actually transforms it).
 - **Export**: "Export SVG"/"Export PNG" (top-right of the graph panel) download the full graph — independent of the current pan/zoom — as a standalone file.
 - **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable.
 - **Theme**: the moon/sun icon (top-right) toggles the whole UI, including exported SVG/PNG files. Defaults to the OS's `prefers-color-scheme`, then remembers your last choice.

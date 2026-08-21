@@ -4,6 +4,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.8] - Separate "Format" from "Convert"
+
+### Changed
+- Switching the "Format" selector no longer replaces the editor content with a sample -- it only changes which parser reads the current text. That side effect is now its own "Load sample" button, so "Format" can't be mistaken for a second way to convert the document (the "Convert to" + "Convert" pair is the only control that transforms content).
+
 ## [0.11.7] - Fix zoom/rotate pushing the graph out of view
 
 ### Fixed

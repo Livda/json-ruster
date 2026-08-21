@@ -75,6 +75,48 @@ async fn format_select_lists_all_five_formats() {
 }
 
 #[wasm_bindgen_test]
+async fn changing_format_does_not_touch_the_editor_content_but_load_sample_does() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    let textarea: web_sys::HtmlTextAreaElement = container
+        .query_selector("textarea")
+        .unwrap()
+        .expect("editor textarea should be rendered")
+        .unchecked_into();
+    let marker = "MARKER_TEXT_NOT_A_REAL_FORMAT";
+    textarea.set_value(marker);
+    dispatch(&textarea, "input");
+    tick().await;
+
+    let format_select: web_sys::HtmlSelectElement = container
+        .query_selector("select")
+        .unwrap()
+        .expect("format select should be rendered")
+        .unchecked_into();
+    format_select.set_value("Yaml");
+    dispatch(&format_select, "change");
+    tick().await;
+
+    assert_eq!(
+        textarea.value(),
+        marker,
+        "switching the parser format alone should not touch the editor content"
+    );
+
+    button_with_text(&container, "Load sample").click();
+    tick().await;
+
+    assert_ne!(
+        textarea.value(),
+        marker,
+        "Load sample should replace the editor content with a sample document"
+    );
+
+    container.remove();
+}
+
+#[wasm_bindgen_test]
 async fn invalid_json_shows_a_parse_error_instead_of_the_graph() {
     let (container, _handle) = mount_app();
     tick().await;

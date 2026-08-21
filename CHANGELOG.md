@@ -4,6 +4,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.12.3] - Deploy to GitHub Pages
+
+### Added
+- `deploy-pages` CI job: on every push to `main`, rebuilds with `trunk build --release --public-url /json-ruster/` (Pages serves a project site under `/<repo>/`, not the domain root -- the override only applies to this build, local dev and the Docker image are unaffected) and publishes via `actions/deploy-pages`. Live at <https://livda.github.io/json-ruster/>.
+
+### Notes
+- Requires the repo's Settings → Pages → "Build and deployment" source set to "GitHub Actions" once (repo-admin only, not something CI can do for itself).
+
 ## [0.12.2] - Collapsible editor panel
 
 ### Added

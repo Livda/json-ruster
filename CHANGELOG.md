@@ -4,6 +4,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.7] - Fix zoom/rotate pushing the graph out of view
+
+### Fixed
+- Mouse-wheel zoom scaled around the graph's local origin instead of the cursor, so on a large graph a few wheel ticks could push everything off-screen; it now keeps the point under the cursor fixed (`zoom_anchored_pan`).
+- Rotating 90° or using Expand/Collapse all reshapes the whole layout (unlike toggling one node, there's no single clicked node to keep in place), so a stale pan/zoom could end up framing empty space -- these now reset the view.
+
 ## [0.11.6] - Expand/collapse all, value type coloring
 
 ### Added

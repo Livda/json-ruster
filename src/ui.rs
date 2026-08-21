@@ -92,6 +92,27 @@ fn value_type_color(theme: Theme, raw: &str) -> &'static str {
     }
 }
 
+/// New (tx, ty) so the point at (`mouse_x`, `mouse_y`) in viewport space
+/// stays under the cursor as the scale changes from `old_scale` to
+/// `new_scale`, given the current pan (`tx`, `ty`). Without this, zooming
+/// scales everything around the graph's local origin instead of where the
+/// user is looking, so a node far from the origin (any large graph) races
+/// off-screen after a few wheel ticks.
+fn zoom_anchored_pan(
+    mouse_x: f64,
+    mouse_y: f64,
+    tx: f64,
+    ty: f64,
+    old_scale: f64,
+    new_scale: f64,
+) -> (f64, f64) {
+    let ratio = new_scale / old_scale;
+    (
+        mouse_x - (mouse_x - tx) * ratio,
+        mouse_y - (mouse_y - ty) * ratio,
+    )
+}
+
 /// Inline style shared by `<select>`/`<button>`/`<input>` toolbar controls,
 /// which otherwise keep the browser's default white background regardless
 /// of theme.
@@ -743,7 +764,29 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     let on_wheel = move |ev: WheelEvent| {
         ev.prevent_default();
         let factor = (-ev.delta_y() * 0.001).exp();
-        set_scale.update(|s| *s = (*s * factor).clamp(0.2, 3.0));
+        let old_scale = scale.get_untracked();
+        let new_scale = (old_scale * factor).clamp(0.2, 3.0);
+
+        // Scale around the point under the cursor rather than the graph's
+        // local origin: without this, zooming shifts everything relative
+        // to (0, 0), so a node far from the origin (any large graph) races
+        // off-screen instead of staying where the user is looking.
+        if let Some(el) = root_ref.get() {
+            let rect = el.get_bounding_client_rect();
+            let mouse_x = ev.client_x() as f64 - rect.left();
+            let mouse_y = ev.client_y() as f64 - rect.top();
+            let (new_tx, new_ty) = zoom_anchored_pan(
+                mouse_x,
+                mouse_y,
+                tx.get_untracked(),
+                ty.get_untracked(),
+                old_scale,
+                new_scale,
+            );
+            set_tx.set(new_tx);
+            set_ty.set(new_ty);
+        }
+        set_scale.set(new_scale);
     };
 
     let toggle = move |id: usize| {
@@ -775,7 +818,22 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         }
     };
     let select = move |id: usize| set_selected.set(Some(id));
-    let on_expand_all = move |_: MouseEvent| set_collapsed.set(HashSet::new());
+
+    // Rotating or expanding/collapsing every node at once reshapes the
+    // whole layout (unlike toggling a single node, there's no one clicked
+    // node to keep under the cursor), so the graph's bounding box can end
+    // up completely different from what the current pan/zoom was framing --
+    // e.g. a wide tree becomes tall after a 90° rotation. Reset the view
+    // instead of leaving it framing empty space or the wrong region.
+    let reset_view = move || {
+        set_scale.set(1.0);
+        set_tx.set(0.0);
+        set_ty.set(0.0);
+    };
+    let on_expand_all = move |_: MouseEvent| {
+        set_collapsed.set(HashSet::new());
+        reset_view();
+    };
     let on_collapse_all = move |_: MouseEvent| {
         let all = graph.with_value(|g| {
             g.nodes
@@ -785,6 +843,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                 .collect()
         });
         set_collapsed.set(all);
+        reset_view();
     };
     let toggle_expand = move |key: (usize, FieldRef)| {
         set_expanded.update(|set| {
@@ -854,7 +913,10 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     <button
                         title="Rotate 90°"
                         style=control_style(theme)
-                        on:click=move |_| set_orientation.update(|o| *o = o.toggle())
+                        on:click=move |_| {
+                            set_orientation.update(|o| *o = o.toggle());
+                            reset_view();
+                        }
                     >
                         "↻"
                     </button>
@@ -1138,6 +1200,35 @@ fn render_nodes(
 mod tests {
     use super::*;
     use crate::model::DataNode;
+
+    #[test]
+    fn zoom_anchored_pan_keeps_the_point_under_the_cursor_fixed() {
+        // World-space point under the cursor before zooming: (mouse - pan) / scale.
+        let (mouse_x, mouse_y) = (300.0, 200.0);
+        let (old_tx, old_ty) = (-50.0, 10.0);
+        let old_scale = 1.0;
+        let new_scale = 2.0;
+
+        let (new_tx, new_ty) =
+            zoom_anchored_pan(mouse_x, mouse_y, old_tx, old_ty, old_scale, new_scale);
+
+        let world_before = (
+            (mouse_x - old_tx) / old_scale,
+            (mouse_y - old_ty) / old_scale,
+        );
+        let world_after = (
+            (mouse_x - new_tx) / new_scale,
+            (mouse_y - new_ty) / new_scale,
+        );
+        assert!((world_before.0 - world_after.0).abs() < 1e-9);
+        assert!((world_before.1 - world_after.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn zoom_anchored_pan_is_a_no_op_when_scale_does_not_change() {
+        let (new_tx, new_ty) = zoom_anchored_pan(100.0, 50.0, -20.0, 5.0, 1.5, 1.5);
+        assert_eq!((new_tx, new_ty), (-20.0, 5.0));
+    }
 
     #[test]
     fn value_type_color_distinguishes_number_bool_null_and_string() {

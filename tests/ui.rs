@@ -43,10 +43,17 @@ fn mount_app() -> (
 /// Yields one macrotask tick so any effect Leptos queued during the last
 /// signal update has a chance to run before we assert on the DOM.
 async fn tick() {
+    wait_ms(0).await;
+}
+
+/// Waits at least `ms` milliseconds of real time -- needed for anything
+/// behind the search box's 200ms debounce, which a single macrotask tick
+/// doesn't wait long enough for.
+async fn wait_ms(ms: i32) {
     let promise = js_sys::Promise::new(&mut |resolve, _reject| {
         web_sys::window()
             .unwrap()
-            .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 0)
+            .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms)
             .unwrap();
     });
     wasm_bindgen_futures::JsFuture::from(promise).await.unwrap();
@@ -185,6 +192,87 @@ fn button_with_text(container: &web_sys::Element, text: &str) -> web_sys::HtmlEl
         .find(|b| b.text_content().as_deref() == Some(text))
         .unwrap_or_else(|| panic!("no button with text {text:?}"))
         .unchecked_into()
+}
+
+#[wasm_bindgen_test]
+async fn fit_button_changes_the_view_transform() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    let textarea: web_sys::HtmlTextAreaElement = container
+        .query_selector("textarea")
+        .unwrap()
+        .expect("editor textarea should be rendered")
+        .unchecked_into();
+    textarea.set_value(r#"{"a": {"b": {"c": {"d": 1}}}}"#);
+    dispatch(&textarea, "input");
+    tick().await;
+
+    let g: web_sys::Element = container
+        .query_selector("svg > g")
+        .unwrap()
+        .expect("the pan/zoom group should be rendered");
+    let before = g.get_attribute("style");
+
+    button_with_text(&container, "Fit").click();
+    tick().await;
+
+    let after = g.get_attribute("style");
+    assert_ne!(
+        before, after,
+        "clicking Fit should change the view's pan/zoom"
+    );
+
+    container.remove();
+}
+
+#[wasm_bindgen_test]
+async fn search_prev_next_cycle_through_matches() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    let textarea: web_sys::HtmlTextAreaElement = container
+        .query_selector("textarea")
+        .unwrap()
+        .expect("editor textarea should be rendered")
+        .unchecked_into();
+    textarea.set_value(r#"{"a": {"x": 1}, "b": {"x": 2}}"#);
+    dispatch(&textarea, "input");
+    tick().await;
+
+    let search: web_sys::HtmlInputElement = container
+        .query_selector("input[placeholder='key or value...']")
+        .unwrap()
+        .expect("search input should be rendered")
+        .unchecked_into();
+    search.set_value("x");
+    dispatch(&search, "input");
+    wait_ms(250).await; // clear the search box's 200ms debounce
+    tick().await;
+
+    assert!(container.text_content().unwrap_or_default().contains("1/2"));
+
+    let next = button_with_text(&container, "▶");
+    next.click();
+    tick().await;
+    assert!(container.text_content().unwrap_or_default().contains("2/2"));
+
+    next.click();
+    tick().await;
+    assert!(
+        container.text_content().unwrap_or_default().contains("1/2"),
+        "next should wrap back around to the first match"
+    );
+
+    let prev = button_with_text(&container, "◀");
+    prev.click();
+    tick().await;
+    assert!(
+        container.text_content().unwrap_or_default().contains("2/2"),
+        "prev from the first match should wrap around to the last one"
+    );
+
+    container.remove();
 }
 
 #[wasm_bindgen_test]

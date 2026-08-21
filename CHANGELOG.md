@@ -4,6 +4,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.11.9] - Zoom to fit, search navigation
+
+### Added
+- "Fit" button in the graph toolbar scales and centers the view to frame the whole graph; also runs automatically after rotating or Expand/Collapse all (previously those just reset pan/zoom to the identity transform, which could still frame the wrong region for a reshaped layout).
+- "◀"/"▶" buttons next to the match counter jump to and center the previous/next search match, wrapping around at either end, instead of only highlighting matches with no way to navigate between them.
+
 ## [0.11.8] - Separate "Format" from "Convert"
 
 ### Changed

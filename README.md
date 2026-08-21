@@ -82,7 +82,8 @@ docker compose --profile test run --rm test
 - **Format**: which parser reads the editor's current text -- switching it doesn't touch the content, only how it's interpreted. Use "Load sample" to fill the editor with an example of the selected format.
 - **Convert**: pick a target format in "Convert to" and click "Convert" to rewrite the editor's content in that format (the only control that actually transforms it).
 - **Export**: "Export SVG"/"Export PNG" (top-right of the graph panel) download the full graph — independent of the current pan/zoom — as a standalone file.
-- **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable.
+- **Search**: type in the "Search" box to highlight matching nodes (title or any field key/value, case-insensitive) with a gold border; collapsed ancestors of a match are automatically expanded so it stays reachable. "◀"/"▶" (shown once there's at least one match) jump to and center the previous/next match, wrapping around at either end.
+- **Zoom to fit**: "Fit" (top-right of the graph panel) scales and centers the view to frame the whole graph at once. Also runs automatically after rotating or using Expand/Collapse all, since those can reshape the layout entirely.
 - **Theme**: the moon/sun icon (top-right) toggles the whole UI, including exported SVG/PNG files. Defaults to the OS's `prefers-color-scheme`, then remembers your last choice.
 - **Copy**: copies the editor's current content to the clipboard.
 - **Share**: copies a link that reopens with the same document and format, encoded in the URL fragment (nothing is sent to a server) as DEFLATE-compressed, base64 text. Refused with an error instead of producing an unusable link if the compressed payload would exceed 8 KB.

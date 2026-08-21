@@ -113,6 +113,63 @@ fn zoom_anchored_pan(
     )
 }
 
+/// Distance from the graph's `<svg>` origin to where node coordinates start
+/// (the view wraps nodes/edges in a fixed `translate(GRAPH_INNER_OFFSET,
+/// GRAPH_INNER_OFFSET)`), needed to convert a node's layout-space position
+/// into the same space `tx`/`ty` pan in.
+const GRAPH_INNER_OFFSET: f64 = 20.0;
+
+/// Bounding box (`min_x`, `min_y`, `max_x`, `max_y`) covering every laid-out
+/// node, in layout space (before `GRAPH_INNER_OFFSET`).
+fn bounding_box(positions: &HashMap<usize, NodeLayout>) -> (f64, f64, f64, f64) {
+    let min_x = positions
+        .values()
+        .map(|p| p.x)
+        .fold(f64::INFINITY, f64::min);
+    let min_y = positions
+        .values()
+        .map(|p| p.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = positions
+        .values()
+        .map(|p| p.x + p.width)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let max_y = positions
+        .values()
+        .map(|p| p.y + p.height)
+        .fold(f64::NEG_INFINITY, f64::max);
+    (min_x, min_y, max_x, max_y)
+}
+
+/// Scale and pan that fit a `min_x`..`max_x` by `min_y`..`max_y` bounding
+/// box (layout space) centered within a `container_w` x `container_h`
+/// viewport, with `margin` px of breathing room on every side. Falls back
+/// to the identity view for a degenerate box or viewport (e.g. the graph
+/// panel hasn't been laid out yet) rather than dividing by zero.
+fn fit_view(
+    min_x: f64,
+    min_y: f64,
+    max_x: f64,
+    max_y: f64,
+    container_w: f64,
+    container_h: f64,
+    margin: f64,
+) -> (f64, f64, f64) {
+    let content_w = max_x - min_x;
+    let content_h = max_y - min_y;
+    if content_w <= 0.0 || content_h <= 0.0 || container_w <= 0.0 || container_h <= 0.0 {
+        return (1.0, 0.0, 0.0);
+    }
+    let scale = (container_w / (content_w + margin * 2.0))
+        .min(container_h / (content_h + margin * 2.0))
+        .clamp(0.2, 3.0);
+    let center_x = GRAPH_INNER_OFFSET + (min_x + max_x) / 2.0;
+    let center_y = GRAPH_INNER_OFFSET + (min_y + max_y) / 2.0;
+    let tx = container_w / 2.0 - scale * center_x;
+    let ty = container_h / 2.0 - scale * center_y;
+    (scale, tx, ty)
+}
+
 /// Inline style shared by `<select>`/`<button>`/`<input>` toolbar controls,
 /// which otherwise keep the browser's default white background regardless
 /// of theme.
@@ -838,16 +895,35 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     // whole layout (unlike toggling a single node, there's no one clicked
     // node to keep under the cursor), so the graph's bounding box can end
     // up completely different from what the current pan/zoom was framing --
-    // e.g. a wide tree becomes tall after a 90° rotation. Reset the view
-    // instead of leaving it framing empty space or the wrong region.
-    let reset_view = move || {
-        set_scale.set(1.0);
-        set_tx.set(0.0);
-        set_ty.set(0.0);
+    // e.g. a wide tree becomes tall after a 90° rotation. Fit the view to
+    // the new layout instead of leaving it framing empty space or the
+    // wrong region.
+    let fit_to_view = move || {
+        let collapsed_set = collapsed.get_untracked();
+        let expanded_set = expanded.get_untracked();
+        let orientation_value = orientation.get_untracked();
+        let positions = graph
+            .with_value(|g| compute_layout(g, &collapsed_set, &expanded_set, orientation_value));
+        let (min_x, min_y, max_x, max_y) = bounding_box(&positions);
+        if let Some(el) = root_ref.get() {
+            let rect = el.get_bounding_client_rect();
+            let (s, x, y) = fit_view(
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+                rect.width(),
+                rect.height(),
+                40.0,
+            );
+            set_scale.set(s);
+            set_tx.set(x);
+            set_ty.set(y);
+        }
     };
     let on_expand_all = move |_: MouseEvent| {
         set_collapsed.set(HashSet::new());
-        reset_view();
+        fit_to_view();
     };
     let on_collapse_all = move |_: MouseEvent| {
         let all = graph.with_value(|g| {
@@ -858,8 +934,55 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                 .collect()
         });
         set_collapsed.set(all);
-        reset_view();
+        fit_to_view();
     };
+    let on_zoom_to_fit = move |_: MouseEvent| fit_to_view();
+
+    // Jumps the view to a node (e.g. a search match) at the current zoom
+    // level, without needing a click on the node itself.
+    let center_on_node = move |id: usize| {
+        let collapsed_set = collapsed.get_untracked();
+        let expanded_set = expanded.get_untracked();
+        let orientation_value = orientation.get_untracked();
+        let positions = graph
+            .with_value(|g| compute_layout(g, &collapsed_set, &expanded_set, orientation_value));
+        if let (Some(pos), Some(el)) = (positions.get(&id), root_ref.get()) {
+            let rect = el.get_bounding_client_rect();
+            let s = scale.get_untracked();
+            let center_x = GRAPH_INNER_OFFSET + pos.x + pos.width / 2.0;
+            let center_y = GRAPH_INNER_OFFSET + pos.y + pos.height / 2.0;
+            set_tx.set(rect.width() / 2.0 - s * center_x);
+            set_ty.set(rect.height() / 2.0 - s * center_y);
+        }
+    };
+
+    let matches_sorted = Memo::new(move |_| {
+        let query = search.get().to_lowercase();
+        let mut ids: Vec<usize> =
+            graph.with_value(|g| find_matches(g, &query).into_iter().collect());
+        ids.sort_unstable();
+        ids
+    });
+    let (match_index, set_match_index) = signal(0usize);
+    Effect::new(move |_| {
+        let _ = matches_sorted.get();
+        set_match_index.set(0);
+    });
+    let step_match = move |delta: isize| {
+        let ids = matches_sorted.get_untracked();
+        if ids.is_empty() {
+            return;
+        }
+        let len = ids.len() as isize;
+        let i = match_index.get_untracked() as isize;
+        let new_i = ((i + delta) % len + len) % len;
+        set_match_index.set(new_i as usize);
+        let id = ids[new_i as usize];
+        set_selected.set(Some(id));
+        center_on_node(id);
+    };
+    let on_prev_match = move |_: MouseEvent| step_match(-1);
+    let on_next_match = move |_: MouseEvent| step_match(1);
     let toggle_expand = move |key: (usize, FieldRef)| {
         set_expanded.update(|set| {
             if !set.remove(&key) {
@@ -905,8 +1028,11 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     {move || {
                         let query = search.get().to_lowercase();
                         if !query.is_empty() {
-                            let count = graph.with_value(|g| find_matches(g, &query).len());
-                            return format!("{count} match(es)");
+                            let count = matches_sorted.get().len();
+                            if count == 0 {
+                                return "0 matches".to_string();
+                            }
+                            return format!("{}/{count} match(es)", match_index.get() + 1);
                         }
                         selected.get()
                             .map(|id| graph.with_value(|g| g.path_to(id)))
@@ -914,6 +1040,14 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     }}
                 </span>
                 <span>
+                    {move || {
+                        (!matches_sorted.get().is_empty()).then(|| view! {
+                            <>
+                                <button title="Previous match" style=control_style(theme) on:click=on_prev_match>"◀"</button>
+                                <button title="Next match" style=control_style(theme) on:click=on_next_match>"▶"</button>
+                            </>
+                        })
+                    }}
                     <button
                         title="Toggle fullscreen"
                         style=control_style(theme)
@@ -930,13 +1064,14 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                         style=control_style(theme)
                         on:click=move |_| {
                             set_orientation.update(|o| *o = o.toggle());
-                            reset_view();
+                            fit_to_view();
                         }
                     >
                         "↻"
                     </button>
                     <button style=control_style(theme) on:click=on_expand_all>"Expand all"</button>
                     <button style=control_style(theme) on:click=on_collapse_all>"Collapse all"</button>
+                    <button title="Zoom to fit the whole graph" style=control_style(theme) on:click=on_zoom_to_fit>"Fit"</button>
                     <button style=control_style(theme) on:click=on_export_svg>"Export SVG"</button>
                     <button style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>
@@ -1243,6 +1378,57 @@ mod tests {
     fn zoom_anchored_pan_is_a_no_op_when_scale_does_not_change() {
         let (new_tx, new_ty) = zoom_anchored_pan(100.0, 50.0, -20.0, 5.0, 1.5, 1.5);
         assert_eq!((new_tx, new_ty), (-20.0, 5.0));
+    }
+
+    #[test]
+    fn bounding_box_covers_every_node() {
+        let mut positions = HashMap::new();
+        positions.insert(
+            0,
+            NodeLayout {
+                x: 10.0,
+                y: -5.0,
+                width: 100.0,
+                height: 40.0,
+            },
+        );
+        positions.insert(
+            1,
+            NodeLayout {
+                x: -20.0,
+                y: 60.0,
+                width: 50.0,
+                height: 20.0,
+            },
+        );
+        assert_eq!(bounding_box(&positions), (-20.0, -5.0, 110.0, 80.0));
+    }
+
+    #[test]
+    fn fit_view_centers_content_and_fills_the_smaller_dimension() {
+        // A 100x100 box in a 400x200 viewport: height is the tighter fit,
+        // so scale is bounded by height, not width.
+        let (scale, tx, ty) = fit_view(0.0, 0.0, 100.0, 100.0, 400.0, 200.0, 0.0);
+        assert!((scale - 2.0).abs() < 1e-9);
+
+        // The box's center (50, 50) in layout space, offset by
+        // GRAPH_INNER_OFFSET and scaled, must land on the viewport's center.
+        let center_x = GRAPH_INNER_OFFSET + 50.0;
+        let center_y = GRAPH_INNER_OFFSET + 50.0;
+        assert!((tx + scale * center_x - 200.0).abs() < 1e-9);
+        assert!((ty + scale * center_y - 100.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn fit_view_falls_back_to_identity_for_a_degenerate_box_or_viewport() {
+        assert_eq!(
+            fit_view(0.0, 0.0, 0.0, 0.0, 400.0, 200.0, 10.0),
+            (1.0, 0.0, 0.0)
+        );
+        assert_eq!(
+            fit_view(0.0, 0.0, 100.0, 100.0, 0.0, 0.0, 10.0),
+            (1.0, 0.0, 0.0)
+        );
     }
 
     #[test]

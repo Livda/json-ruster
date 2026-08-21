@@ -571,6 +571,7 @@ pub fn App() -> impl IntoView {
     let (copied, set_copied) = signal(false);
     let (share_copied, set_share_copied) = signal(false);
     let (share_error, set_share_error) = signal(None::<String>);
+    let (editor_visible, set_editor_visible) = signal(true);
     let editor_ref: NodeRef<leptos::html::Div> = NodeRef::new();
 
     // Remember the current document and theme locally so a reload picks up
@@ -779,37 +780,52 @@ pub fn App() -> impl IntoView {
                 })}
             </div>
             <div style="display:flex; flex:1; min-height:0;">
-                <div node_ref=editor_ref style="position:relative; width:40%; height:100%;">
-                    <textarea
-                        style=move || format!(
-                            "width:100%; height:100%; box-sizing:border-box; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
-                            theme().toolbar_border, theme().node_bg, theme().text_color
-                        )
-                        prop:value=move || input.get()
-                        on:input=move |ev| {
-                            set_input.set(event_target_value(&ev));
-                            set_convert_error.set(None);
-                        }
-                    />
-                    <button
-                        class="rk-btn"
-                        title="Toggle fullscreen"
-                        on:click=move |_| {
-                            if let Some(el) = editor_ref.get() {
-                                toggle_fullscreen(el.into());
+                {move || editor_visible.get().then(|| view! {
+                    <div node_ref=editor_ref style="position:relative; width:40%; height:100%;">
+                        <textarea
+                            style=move || format!(
+                                "width:100%; height:100%; box-sizing:border-box; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:13px; padding:1em; resize:none; border:1px solid {}; background:{}; color:{};",
+                                theme().toolbar_border, theme().node_bg, theme().text_color
+                            )
+                            prop:value=move || input.get()
+                            on:input=move |ev| {
+                                set_input.set(event_target_value(&ev));
+                                set_convert_error.set(None);
                             }
-                        }
-                        style=move || format!(
-                            "position:absolute; top:10px; right:10px; border:1px solid {}; \
-                             background:{}; color:{}; border-radius:8px; padding:5px 8px; \
-                             font-size:13px; cursor:pointer; box-shadow:{};",
-                            theme().toolbar_border, theme().node_bg, theme().text_color, theme().shadow
-                        )
-                    >
-                        "⛶"
-                    </button>
-                </div>
-                <div style=move || format!("width:60%; height:100%; overflow:hidden; background:{};", theme().graph_bg)>
+                        />
+                        <button
+                            class="rk-btn"
+                            title="Toggle fullscreen"
+                            on:click=move |_| {
+                                if let Some(el) = editor_ref.get() {
+                                    toggle_fullscreen(el.into());
+                                }
+                            }
+                            style=move || format!(
+                                "position:absolute; top:10px; right:10px; border:1px solid {}; \
+                                 background:{}; color:{}; border-radius:8px; padding:5px 8px; \
+                                 font-size:13px; cursor:pointer; box-shadow:{};",
+                                theme().toolbar_border, theme().node_bg, theme().text_color, theme().shadow
+                            )
+                        >
+                            "⛶"
+                        </button>
+                    </div>
+                })}
+                <button
+                    class="rk-btn"
+                    title=move || if editor_visible.get() { "Hide editor" } else { "Show editor" }
+                    on:click=move |_| set_editor_visible.update(|v| *v = !*v)
+                    style=move || format!(
+                        "align-self:center; flex-shrink:0; width:16px; height:44px; padding:0; \
+                         border:1px solid {}; border-radius:6px; background:{}; color:{}; \
+                         font-size:11px; cursor:pointer;",
+                        theme().toolbar_border, theme().node_bg, theme().text_color
+                    )
+                >
+                    {move || if editor_visible.get() { "‹" } else { "›" }}
+                </button>
+                <div style=move || format!("flex:1; min-width:0; height:100%; overflow:hidden; background:{};", theme().graph_bg)>
                     {move || match parsed.get() {
                         Ok(data) => view! { <GraphView data=data theme=theme() search=search /> }.into_any(),
                         Err(e) => {

@@ -4,6 +4,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.12.2] - Collapsible editor panel
+
+### Added
+- A "‹"/"›" handle between the editor and the graph panel hides/reveals the editor, letting the graph use the full width (like JSON Crack's collapsible sidebar). The graph panel already used `flex:1`, so it takes the freed space automatically.
+
 ## [0.12.1] - Fix graph toolbar overlap
 
 ### Fixed

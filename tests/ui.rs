@@ -195,6 +195,32 @@ fn button_with_text(container: &web_sys::Element, text: &str) -> web_sys::HtmlEl
 }
 
 #[wasm_bindgen_test]
+async fn editor_toggle_hides_and_reveals_the_editor_pane() {
+    let (container, _handle) = mount_app();
+    tick().await;
+
+    assert!(container.query_selector("textarea").unwrap().is_some());
+
+    let toggle = button_with_text(&container, "‹");
+    toggle.click();
+    tick().await;
+    assert!(
+        container.query_selector("textarea").unwrap().is_none(),
+        "editor should be hidden after collapsing it"
+    );
+
+    let reopen = button_with_text(&container, "›");
+    reopen.click();
+    tick().await;
+    assert!(
+        container.query_selector("textarea").unwrap().is_some(),
+        "editor should come back after expanding it again"
+    );
+
+    container.remove();
+}
+
+#[wasm_bindgen_test]
 async fn fit_button_changes_the_view_transform() {
     let (container, _handle) = mount_app();
     tick().await;

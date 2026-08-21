@@ -829,6 +829,11 @@ pub fn App() -> impl IntoView {
 fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl IntoView {
     let graph = StoredValue::new(build_graph(&data));
     let root_ref: NodeRef<leptos::html::Div> = NodeRef::new();
+    // The toolbar used to float on top of the svg (position:absolute),
+    // which could hide the root node behind it depending on the initial
+    // layout. It's now a normal row above the svg instead, so pan/zoom/fit
+    // math needs the svg area's own rect, not the whole panel's.
+    let svg_area_ref: NodeRef<leptos::html::Div> = NodeRef::new();
 
     let (collapsed, set_collapsed) = signal(HashSet::<usize>::new());
     let (selected, set_selected) = signal(None::<usize>);
@@ -904,7 +909,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         // local origin: without this, zooming shifts everything relative
         // to (0, 0), so a node far from the origin (any large graph) races
         // off-screen instead of staying where the user is looking.
-        if let Some(el) = root_ref.get() {
+        if let Some(el) = svg_area_ref.get() {
             let rect = el.get_bounding_client_rect();
             let mouse_x = ev.client_x() as f64 - rect.left();
             let mouse_y = ev.client_y() as f64 - rect.top();
@@ -966,7 +971,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         let positions = graph
             .with_value(|g| compute_layout(g, &collapsed_set, &expanded_set, orientation_value));
         let (min_x, min_y, max_x, max_y) = bounding_box(&positions);
-        if let Some(el) = root_ref.get() {
+        if let Some(el) = svg_area_ref.get() {
             let rect = el.get_bounding_client_rect();
             let (s, x, y) = fit_view(
                 min_x,
@@ -1007,7 +1012,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
         let orientation_value = orientation.get_untracked();
         let positions = graph
             .with_value(|g| compute_layout(g, &collapsed_set, &expanded_set, orientation_value));
-        if let (Some(pos), Some(el)) = (positions.get(&id), root_ref.get()) {
+        if let (Some(pos), Some(el)) = (positions.get(&id), svg_area_ref.get()) {
             let rect = el.get_bounding_client_rect();
             let s = scale.get_untracked();
             let center_x = GRAPH_INNER_OFFSET + pos.x + pos.width / 2.0;
@@ -1073,17 +1078,11 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
     view! {
         <div
             node_ref=root_ref
-            style=move || format!(
-                "width:100%; height:100%; position:relative; cursor:{}; background:{};",
-                if is_dragging.get() { "grabbing" } else { "grab" },
-                theme.graph_bg
-            )
-            on:pointerdown=on_pointer_down
-            on:wheel=on_wheel
+            style="width:100%; height:100%; display:flex; flex-direction:column;"
         >
             <div style=move || format!(
-                "position:absolute; top:10px; left:10px; right:10px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; padding:6px 10px; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:12px; color:{}; background:{}; border:1px solid {}; border-radius:10px; box-shadow:{}; z-index:1;",
-                theme.toolbar_text, theme.toolbar_bg, theme.toolbar_border, theme.shadow
+                "display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin:10px 10px 0; font-family:'IBM Plex Mono', ui-monospace, monospace; font-size:12px; color:{};",
+                theme.toolbar_text
             )>
                 <span style="pointer-events:none;">
                     {move || {
@@ -1097,7 +1096,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                         }
                         selected.get()
                             .map(|id| graph.with_value(|g| g.path_to(id)))
-                            .unwrap_or_else(|| "Click a node to select it (click = collapse/expand)".to_string())
+                            .unwrap_or_default()
                     }}
                 </span>
                 <span style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -1139,6 +1138,16 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                     <button class="rk-btn" style=control_style(theme) on:click=on_export_png>"Export PNG"</button>
                 </span>
             </div>
+            <div
+                node_ref=svg_area_ref
+                style=move || format!(
+                    "flex:1; min-height:0; position:relative; cursor:{}; background:{};",
+                    if is_dragging.get() { "grabbing" } else { "grab" },
+                    theme.graph_bg
+                )
+                on:pointerdown=on_pointer_down
+                on:wheel=on_wheel
+            >
             <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
                 <g style=move || format!("transform: translate({}px, {}px) scale({})", tx.get(), ty.get(), scale.get())>
                     {move || {
@@ -1175,6 +1184,7 @@ fn GraphView(data: DataNode, theme: Theme, search: ReadSignal<String>) -> impl I
                 </g>
             </svg>
             {legend(theme)}
+            </div>
         </div>
     }
 }

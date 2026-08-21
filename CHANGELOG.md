@@ -4,6 +4,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/2.0.0/) v2.0.0.
 
 ## [Unreleased]
 
+## [0.12.1] - Fix graph toolbar overlap
+
+### Fixed
+- The graph panel's toolbar floated on top of the svg (`position:absolute`), which could hide the root node behind it depending on the initial layout; it's now a normal row above the svg, so it never overlaps graph content. Pan/zoom/fit math (`on_wheel`, `fit_to_view`, `center_on_node`) now measures the svg area itself rather than the whole panel, since the toolbar no longer shares that space.
+- The toolbar's button row no longer sits inside a bordered/shadowed pill -- buttons float directly over the graph background, matching the approved mockup (only the top App toolbar uses that grouped-pill treatment).
+- Dropped the default "Click a node to select it..." placeholder text; the status line now only shows something when there's an active selection or search.
+
 ## [0.12.0] - Visual refresh
 
 ### Added
